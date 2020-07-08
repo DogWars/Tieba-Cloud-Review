@@ -135,7 +135,8 @@ class _CloudReview(BlockID):
         else:
             return None
 
-    def _link_ctrl_json(self,ctrl_filepath):
+    @staticmethod
+    def _link_ctrl_json(ctrl_filepath):
         """
         链接到一个控制用的json
         """

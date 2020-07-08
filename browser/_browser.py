@@ -283,17 +283,22 @@ class _Browser():
             raws = []
             retry_times = 6
             while retry_times:
-                res = html.unescape(req.get(self.tieba_url,
-                                            params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
-                                            headers=self.account.headers,
-                                            allow_redirects=False).text)
-                if res.status_code == 200:
-                    raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',res)
-                    if raws:
-                        break
-                else:
+                try:
+                    res = req.get(self.tieba_url,
+                                  params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
+                                  headers=self.account.headers)
+                except(req.exceptions.TooManyRedirects):
                     retry_times-=1
                     time.sleep(0.25)
+                else:
+                    if res.status_code == 200:
+                        raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',html.unescape(res.text))
+                        if raws:
+                            break
+                    else:
+                        retry_times-=1
+                        time.sleep(0.25)
+
             if not raws:
                 self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
                 return threads
@@ -325,32 +330,33 @@ class _Browser():
 
         self._set_host(self.tieba_post_url)
 
-        post_list = []
         raw = None
         retry_times = 6
         while retry_times:
-            res = req.get(self.tieba_post_url + str(tid),
-                            params={'pn':pn},
-                            headers=self.account.headers,
-                            allow_redirects=False)
-            if res.status_code == 200:
-                try:
-                    raw = re.search('<div class="p_postlist" id="j_p_postlist">.*</div>',res.text,re.S).group()
-                except(AttributeError):
-                    pass
-                else:
-                    break
-            else:
+            try:
+                res = req.get(self.tieba_post_url + str(tid),
+                              params={'pn':pn},
+                              headers=self.account.headers)
+            except(req.exceptions.TooManyRedirects):
                 retry_times-=1
                 time.sleep(0.25)
+            else:
+                if res.status_code == 200:
+                    raw = re.search('<div class="p_postlist" id="j_p_postlist">.*</div>',res.text,re.S)
+                    if raw:
+                        raw=raw.group()
+                        break
+                    else:
+                        retry_times-=1
+                        time.sleep(0.25)
 
-        if raw:
-            has_next = True if re.search('<a href=".*">尾页</a>',raw) else False
-            content = BeautifulSoup(raw,'lxml')
-        else:
+        if not raw:
             self.log.error("Failed to get posts of {tid}".format(tid=tid))
-            return False,post_list
+            return False,[]
 
+        has_next = True if re.search('<a href=".*">尾页</a>',raw) else False
+        content = BeautifulSoup(raw,'lxml')
+        post_list = []
         try:
             posts = content.find_all("div",{'data-field':True,'data-pid':True})
             for post_raw in posts:
@@ -376,7 +382,7 @@ class _Browser():
                 post.pid = author_info["content"]["post_id"]
                 post.user_name = author_info["author"]["user_name"]
                 post.nick_name = author_info["author"]["user_nickname"]
-                post.portrait = author_info["author"]["portrait"]
+                post.portrait = re.search('[^?]*',author_info["author"]["portrait"]).group()
                 post.level = int(post_raw.find('div',attrs={'class':'d_badge_lv'}).text)
                 post.floor = int(author_info["content"]["post_no"])
                 post.comment_num = int(author_info["content"]["comment_num"])
@@ -400,23 +406,25 @@ class _Browser():
         """   
         
         self._set_host(self.comment_url)
-
-        raw = None
         retry_times = 6
         while retry_times:
-            res = req.get(self.comment_url,
-                          params={'tid':tid,'pid':pid,'pn':pn},
-                          headers=self.account.headers,
-                          allow_redirects=False)
-            if res.status_code == 200:
-                break
-            else:
+            try:
+                res = req.get(self.comment_url,
+                              params={'tid':tid,'pid':pid,'pn':pn},
+                              headers=self.account.headers)
+            except(req.exceptions.TooManyRedirects):
                 retry_times-=1
                 time.sleep(0.25)
+            else:
+                if res.status_code == 200:
+                    break
+                else:
+                    retry_times-=1
+                    time.sleep(0.25)
 
         if res.status_code != 200:
             self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
-            return False,[]
+            return False,comments
 
         content = BeautifulSoup(res.text,'lxml')
         comments = []
