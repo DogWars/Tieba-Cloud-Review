@@ -280,47 +280,59 @@ class _Browser():
         try:
             threads = []
             self._set_host(self.tieba_url)
-            res = html.unescape(req.get(self.tieba_url,
-                                        params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
-                                        headers=self.account.headers).text)
-            raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',res)
+            raws = []
+            retry_times = 6
+            while retry_times:
+                res = html.unescape(req.get(self.tieba_url,
+                                            params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
+                                            headers=self.account.headers,
+                                            allow_redirects=False).text)
+                if res.status_code == 200:
+                    raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',res)
+                    if raws:
+                        break
+                else:
+                    retry_times-=1
+                    time.sleep(0.25)
+            if not raws:
+                self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
+                return threads
+
             for raw in raws:
                 thread = _Thread()
-                thread.tid = re.search('href="/p/(\d*)', raw).group(1)
+                thread.tid = int(re.search('href="/p/(\d*)', raw).group(1))
                 thread.pid = re.search('"first_post_id":(.*?),', raw).group(1)
                 thread.topic = html.unescape(re.search('href="/p/.*?" title="([\s\S]*?)"', raw).group(1))
-                thread.reply_num = re.search('"reply_num":(.*?),',raw).group(1)
+                thread.reply_num = int(re.search('"reply_num":(.*?),',raw).group(1))
                 thread.user_name = re.search('''frs-author-name-wrap"><a rel="noreferrer"  data-field='{"un":"(.*?)",''',raw).group(1).encode('utf-8').decode('unicode_escape')
                 thread.nick_name = re.search('title="主题作者: (.*?)"', raw).group(1)
                 thread.portrait = re.search('id":"(.*?)"}',raw).group(1)
                 threads.append(thread)
-            if threads == []:
-                raise(ValueError("Failed to get threads!"))
-        except(ValueError,IndexError):
-            self.log.error("Failed to get threads!")
+        except(AttributeError):
+            self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
         finally:
             return threads
 
-    def _get_posts(self,tid,pn=0):
+    def _get_posts(self,tid,pn=1):
         """
         获取帖子回复
-        _get_post(tid,pn=0)
+        _get_post(tid,pn=1)
 
         Returns:
             has_next: 是否还有下一页
             _Post
         """
 
-        tid = str(tid)
         self._set_host(self.tieba_post_url)
 
         post_list = []
         raw = None
         retry_times = 6
         while retry_times:
-            res = req.get(self.tieba_post_url + tid,
+            res = req.get(self.tieba_post_url + str(tid),
                             params={'pn':pn},
-                            headers=self.account.headers)
+                            headers=self.account.headers,
+                            allow_redirects=False)
             if res.status_code == 200:
                 try:
                     raw = re.search('<div class="p_postlist" id="j_p_postlist">.*</div>',res.text,re.S).group()
@@ -366,8 +378,8 @@ class _Browser():
                 post.nick_name = author_info["author"]["user_nickname"]
                 post.portrait = author_info["author"]["portrait"]
                 post.level = int(post_raw.find('div',attrs={'class':'d_badge_lv'}).text)
-                post.floor = author_info["content"]["post_no"]
-                post.comment_num = author_info["content"]["comment_num"]
+                post.floor = int(author_info["content"]["post_no"])
+                post.comment_num = int(author_info["content"]["comment_num"])
 
                 post_list.append(post)
 
@@ -387,8 +399,6 @@ class _Browser():
             _Comment
         """   
         
-        tid = str(tid)
-        pid = str(pid)
         self._set_host(self.comment_url)
 
         raw = None
@@ -396,7 +406,8 @@ class _Browser():
         while retry_times:
             res = req.get(self.comment_url,
                           params={'tid':tid,'pid':pid,'pn':pn},
-                          headers=self.account.headers)
+                          headers=self.account.headers,
+                          allow_redirects=False)
             if res.status_code == 200:
                 break
             else:
