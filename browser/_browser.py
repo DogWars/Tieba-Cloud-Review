@@ -1,6 +1,6 @@
 ﻿#!/usr/bin/env python
 # -*- coding:utf-8 -*-
-__all__ = ('_Browser','SCRIPT_PATH','FILENAME','SHOTNAME')
+__all__ = ('_Browser','_Thread','_Post','_Comment','SCRIPT_PATH','FILENAME','SHOTNAME')
 
 import os
 import sys
@@ -76,6 +76,7 @@ class _Post():
                  'portrait',
                  'level',
                  'floor',
+                 'is_thread_owner',
                  'comment_num',
                  'sign',
                  'imgs',
@@ -151,24 +152,20 @@ class _Headers():
 
 class _Browser():
     """
-    贴吧部分浏览&删帖API的封装
+    贴吧浏览、参数获取等API的封装
     _Browser(headers_filepath:str)
     """
-
-    old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
-    new_del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
-    new_del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
-    new_del_batch_api = 'https://tieba.baidu.com/f/commit/thread/batchDelete'
-    new_block_api = 'http://tieba.baidu.com/pmc/blockid'
-    old_block_api = 'http://c.tieba.baidu.com/c/c/bawu/commitprison'
-    tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
-    fid_api = 'http://tieba.baidu.com/sign/info'
-    portrait_api = 'http://tieba.baidu.com/i/sys/user_json'
-
     tieba_url = 'http://tieba.baidu.com/f'
     tieba_post_url = 'http://tieba.baidu.com/p/'
-    user_homepage_url = 'https://tieba.baidu.com/home/main/'
     comment_url = 'http://tieba.baidu.com/p/comment'
+    user_homepage_url = 'https://tieba.baidu.com/home/main/'
+
+    tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
+    fid_api = 'http://tieba.baidu.com/sign/info'
+    user_json_api = 'http://tieba.baidu.com/i/sys/user_json'
+    panel_api = 'https://tieba.baidu.com/home/get/panel'
+    self_info_api = 'http://tieba.baidu.com/f/user/json_userinfo'
+
 
     def __init__(self,headers_filepath:str):
         """
@@ -206,6 +203,7 @@ class _Browser():
 
         self.account = _Headers(headers_filepath)
 
+
     def quit(self):
         """
         自动缓存fid信息
@@ -216,39 +214,125 @@ class _Browser():
         except AttributeError:
             self.log.warning("Failed to save fid cache!")
 
+
+    @staticmethod
+    def _is_nick_name(name:str):
+        name = str(name)
+        return True if re.search('^[\u4e00-\u9fa5\w]',name) else False
+
+
+    def _is_vip(self,keyword:str):
+        if keyword.startswith('tb.'):
+            params = {'id':keyword}
+        else:
+            params = {'un':keyword}
+
+        self._set_host(self.panel_api)
+        retry_times = 3
+        while retry_times:
+            try:
+                res = req.get(self.panel_api,
+                              params=params,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    break
+            retry_times-=1
+            time.sleep(0.25)
+
+        if res.status_code == 200:
+            if re.search('"vipInfo":\[\]',res.text):
+                return False
+            else:
+                return True
+        else:
+            self.log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
+            return None
+
+
+    def _is_self_vip(self):
+        self._set_host(self.self_info_api)
+        portrait = None
+        retry_times = 2
+        while retry_times:
+            try:
+                res = req.get(self.self_info_api,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"user_portrait":"([\w.-]+)',res.text)
+                    if raw:
+                        portrait = raw.group(1)
+                        break
+            retry_times-=1
+            time.sleep(0.25)
+
+        if not portrait:
+            self.log.error("Failed to get self info")
+            return None
+
+        return self._is_vip(portrait)
+
+
     def _set_host(self,url:str):
         try:
             self.account.headers['Host'] = re.search('://(.+?)/',url).group(1)
         except AttributeError:
             self.log.warning('Wrong type of url "{url}"!'.format(url=url))
 
+
     def _get_tbs(self):
         self._set_host(self.tbs_api)
-        res = req.get(self.tbs_api,
-                      headers = self.account.headers).text
-        tbs = re.search('"tbs":"([a-z\d]+)',res).group(1)
-        return tbs
+        retry_times = 5
+        while retry_times:
+            try:
+                res = req.get(self.tbs_api,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"tbs":"([a-z\d]+)',res.text)
+                    if raw:
+                        tbs = raw.group(1)
+                        return tbs
+            retry_times-=1
+            time.sleep(0.25)
+
+        self.log.error("Failed to get tbs")
+        return ''
+
 
     def _get_fid(self,tb_name:str):
         if self.fid_dict.__contains__(tb_name):
             return self.fid_dict[tb_name]
         else:
             self._set_host(self.fid_api)
-            raw = None
-            count = 0
-            while not raw and count < 4:
-                res = req.get(self.fid_api,
-                              params={'kw':tb_name,'ie':'utf-8'},
-                              headers = self.account.headers).text
-                raw = re.search('"forum_id":(\d+)', res)
-                count+=1
-            if raw:
-                fid = raw.group(1)
-                self.fid_dict[tb_name] = fid
-                return fid
-            else:
-                self.log.critical("Failed to get fid of {name}".format(name=tb_name))
-                raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
+            retry_times = 10
+            while retry_times:
+                try:
+                    res = req.get(self.fid_api,
+                                  params={'kw':tb_name,'ie':'utf-8'},
+                                  headers = self.account.headers)
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200:
+                        raw = re.search('"forum_id":(\d+)', res.text)
+                        if raw:
+                            fid = raw.group(1)
+                            self.fid_dict[tb_name] = fid
+                            return fid
+                retry_times-=1
+                time.sleep(0.5)
+
+        self.log.critical("Failed to get fid of {name}".format(name=tb_name))
+        raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
+
 
     def _get_sign(self,data):
         raw_list = []
@@ -260,13 +344,88 @@ class _Browser():
         sign = md5.hexdigest().upper()
         return sign
 
-    def _get_portrait(self,name):
-        self._set_host(self.user_homepage_url)
-        res = req.get(self.user_homepage_url,
-                      params={'un':name},
-                      headers=self.account.headers).text
-        portrait = re.search('data-sign="([\w\.-]+)',res).group(1)
-        return portrait
+
+    def _get_portrait(self,name:str):
+        name = str(name)
+        if not self._is_nick_name(name):
+            self._set_host(self.user_json_api)
+            retry_times = 2
+            while retry_times:
+                try:
+                    res = req.get(self.user_homepage_url,
+                                  params={'un':name},
+                                  headers=self.account.headers).text
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200:
+                        raw = re.search('"portrait":"([\w.-]+)', res.text)
+                        if raw:
+                            portrait = raw.group(1)
+                            return portrait
+                retry_times-=1
+
+        self._set_host(self.panel_api)
+        retry_times = 2
+        while retry_times:
+            try:
+                res = req.get(self.panel_api,
+                              params={'un':name},
+                              headers=self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"portrait":"([\w.-]+)', res.text)
+                    if raw:
+                        portrait = raw.group(1)
+                        return portrait
+            retry_times-=1
+
+        self.log.error("Failed to get portrait of {name}".format(name=name))
+        return ''
+
+
+    def _get_user_id(self,name:str):
+        name = str(name)
+        if not self._is_nick_name(name):
+            self._set_host(self.user_json_api)
+            retry_times = 2
+            while retry_times:
+                try:
+                    res = req.get(self.user_homepage_url,
+                                  params={'un':name},
+                                  headers=self.account.headers)
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200:
+                        raw = re.search('"id":(\d+)', res.text)
+                        if raw:
+                            user_id = raw.group(1)
+                            return user_id
+                retry_times-=1
+
+        self._set_host(self.panel_api)
+        retry_times = 2
+        while retry_times:
+            try:
+                res = req.get(self.panel_api,
+                              params={'un':name},
+                              headers=self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"id":(\d+)', res.text)
+                    if raw:
+                        user_id = raw.group(1)
+                        return user_id
+            retry_times-=1
+
+        self.log.error("Failed to get user_id of {name}".format(name=name))
+        return ''
+
 
     def _get_threads(self,tb_name,pn=0):
         """
@@ -277,33 +436,31 @@ class _Browser():
             _Thread
         """
 
-        try:
-            threads = []
-            self._set_host(self.tieba_url)
-            raws = []
-            retry_times = 6
-            while retry_times:
-                try:
-                    res = req.get(self.tieba_url,
-                                  params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
-                                  headers=self.account.headers)
-                except(req.exceptions.TooManyRedirects):
-                    retry_times-=1
-                    time.sleep(0.25)
-                else:
-                    if res.status_code == 200:
-                        raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',html.unescape(res.text))
-                        if raws:
-                            break
-                    else:
-                        retry_times-=1
-                        time.sleep(0.25)
+        threads = []
+        self._set_host(self.tieba_url)
+        raws = []
+        retry_times = 20
+        while retry_times:
+            try:
+                res = req.get(self.tieba_url,
+                              params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
+                              headers=self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raws = re.findall('thread_list clearfix([\s\S]*?)创建时间"',html.unescape(res.text))
+                    if raws:
+                        break
+            retry_times-=1
+            time.sleep(0.5)
 
-            if not raws:
-                self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
-                return threads
+        if not raws:
+            self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
+            return threads
 
-            for raw in raws:
+        for raw in raws:
+            try:
                 thread = _Thread()
                 thread.tid = int(re.search('href="/p/(\d*)', raw).group(1))
                 thread.pid = re.search('"first_post_id":(.*?),', raw).group(1)
@@ -312,11 +469,13 @@ class _Browser():
                 thread.user_name = re.search('''frs-author-name-wrap"><a rel="noreferrer"  data-field='{"un":"(.*?)",''',raw).group(1).encode('utf-8').decode('unicode_escape')
                 thread.nick_name = re.search('title="主题作者: (.*?)"', raw).group(1)
                 thread.portrait = re.search('id":"(.*?)"}',raw).group(1)
+            except(AttributeError):
+                continue
+            else:
                 threads.append(thread)
-        except(AttributeError):
-            self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
-        finally:
-            return threads
+
+        return threads
+
 
     def _get_posts(self,tid,pn=1):
         """
@@ -331,24 +490,22 @@ class _Browser():
         self._set_host(self.tieba_post_url)
 
         raw = None
-        retry_times = 6
+        retry_times = 20
         while retry_times:
             try:
                 res = req.get(self.tieba_post_url + str(tid),
                               params={'pn':pn},
                               headers=self.account.headers)
-            except(req.exceptions.TooManyRedirects):
-                retry_times-=1
-                time.sleep(0.25)
+            except(req.exceptions.RequestException):
+                pass
             else:
                 if res.status_code == 200:
                     raw = re.search('<div class="p_postlist" id="j_p_postlist">.*</div>',res.text,re.S)
                     if raw:
-                        raw=raw.group()
+                        raw = raw.group()
                         break
-                    else:
-                        retry_times-=1
-                        time.sleep(0.25)
+            retry_times-=1
+            time.sleep(0.5)
 
         if not raw:
             self.log.error("Failed to get posts of {tid}".format(tid=tid))
@@ -378,6 +535,8 @@ class _Browser():
                 smileys_raw = text_raw.find_all('img',class_='BDE_Smiley')
                 post.smileys = [i["src"] for i in smileys_raw]
 
+                post.is_thread_owner = True if post_raw.find("div",class_=re.compile('^louzhubiaoshi')) else False
+
                 author_info = json.loads(post_raw["data-field"])
                 post.pid = author_info["content"]["post_id"]
                 post.user_name = author_info["author"]["user_name"]
@@ -395,7 +554,8 @@ class _Browser():
         else:
             return has_next,post_list
 
-    def _get_comment(self,tid,pid,pn=1):
+
+    def _get_comments(self,tid,pid,pn=1):
         """
         获取楼中楼回复
         _get_comment(tid,pid,pn=1)
@@ -406,30 +566,29 @@ class _Browser():
         """   
         
         self._set_host(self.comment_url)
-        retry_times = 6
+        retry_times = 20
         while retry_times:
             try:
                 res = req.get(self.comment_url,
                               params={'tid':tid,'pid':pid,'pn':pn},
                               headers=self.account.headers)
-            except(req.exceptions.TooManyRedirects):
-                retry_times-=1
-                time.sleep(0.25)
+            except(req.exceptions.RequestException):
+                pass
             else:
                 if res.status_code == 200:
+                    raw = res.text
                     break
-                else:
-                    retry_times-=1
-                    time.sleep(0.25)
+            retry_times-=1
+            time.sleep(0.5)
 
-        if res.status_code != 200:
+        if not raw:
             self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
-            return False,comments
+            return False,[]
 
         content = BeautifulSoup(res.text,'lxml')
         comments = []
         try:
-            raws = content.find_all('li',class_=re.compile('lzl_single_post'))
+            raws = content.find_all('li',class_=re.compile('^lzl_single_post'))
             has_next = True if content.find('a',string='下一页') else False
 
             for comment_raw in raws:
@@ -458,52 +617,3 @@ class _Browser():
         except KeyError:
             log.error("KeyError: Failed to get posts of {pid} in thread {tid}".format(tid=tid,pid=pid))
             return False,[]
-
-    def _new_del_thread(self,tb_name,tid):
-        """
-        新api，删主题帖
-        _new_del_thread(tb_name,tid)
-        """
-        payload = {'commit_from':'pb',
-                   'ie':'utf-8',
-                   'tbs':self._get_tbs(),
-                   'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
-                   'tid':tid
-                   }
-        self._set_host(self.new_del_thread_api)
-        res = req.post(self.new_del_thread_api,
-                       data = payload,
-                       headers = self.account.headers).content.decode('unicode_escape')
-        if re.search('"err_code":0',res):
-            self.log.info("Delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
-            return True
-        else:
-            self.log.warning("Failed to delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
-            return False
-
-    def _new_del_post(self,tb_name,tid,pid):
-        """
-        新api，删回复
-        __new_del_post(tb_name,tid,pid)
-        """
-        payload = {'commit_from':'pb',
-                   'ie':'utf-8',
-                   'tbs':self._get_tbs(),
-                   'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
-                   'tid':tid,
-                   'is_vipdel':0,
-                   'pid':pid,
-                   'is_finf':'false'
-                   }
-        self._set_host(self.new_del_post_api)
-        res = req.post(self.new_del_post_api,
-                       data = payload,
-                       headers = self.account.headers).content.decode('unicode_escape')
-        if re.search('"err_code":0',res):
-            self.log.info("Delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
-            return True
-        else:
-            self.log.warning("Failed to delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
-            return False

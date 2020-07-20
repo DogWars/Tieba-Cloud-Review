@@ -20,7 +20,7 @@ from urllib.parse import unquote
 from PIL import Image
 import pyzbar.pyzbar as pyzbar
 
-from .block_id import BlockID
+from .admin_browser import AdminBrowser
 from ._browser import SHOTNAME
 
 DB_NAME = 'tieba_imgs'  # 数据库名
@@ -38,7 +38,7 @@ else:
         'passwd':''
         }
 
-class _CloudReview(BlockID):
+class _CloudReview(AdminBrowser):
     """
     _CloudReview(headers_filepath,ctrl_filepath)
 
@@ -60,7 +60,7 @@ class _CloudReview(BlockID):
             self.log.critical('Incorrect format of ctrl json!')
             raise(AttributeError('Incorrect format of ctrl json!'))
 
-        self.table_name=SHOTNAME
+        self.table_name = SHOTNAME
         try:
             self.mydb = mysql.connector.connect(host=mysql_login['host'],
                                                 user=mysql_login['user'],
@@ -126,8 +126,26 @@ class _CloudReview(BlockID):
         """
 
         self._set_host(img_url)
-        res = req.get(img_url,headers=self.account.headers)
-        image = Image.open(BytesIO(res.content))
+        retry_times = 20
+        image = None
+        while retry_times:
+            try:
+                res = req.get(img_url,headers=self.account.headers)
+            except(req.exceptions.RequestException):
+                retry_times-=1
+                time.sleep(0.5)
+            else:
+                if res.status_code == 200:
+                    image = Image.open(BytesIO(res.content))
+                    break
+                else:
+                    retry_times-=1
+                    time.sleep(0.5)
+
+        if not image:
+            self.log.error('Failed to get image {url}'.format(url=img_url))
+            return None
+
         raw = pyzbar.decode(image)
         if raw:
             data = unquote(raw[0].data.decode('utf-8'))

@@ -40,7 +40,7 @@ except AttributeError:
     print('Please input the admin_type!')
     admin_type = 1
 
-block_id = browser.BlockID(kwargs['header_filepath'],admin_type)
+block_id = browser.AdminBrowser(kwargs['header_filepath'],admin_type)
 
 for block in block_list:
     block_id.block(block)
