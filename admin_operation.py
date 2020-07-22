@@ -54,7 +54,7 @@ if __name__ == '__main__':
                         help='path of the headers txt | default value is ./user_control/headers.txt')
     kwargs = vars(parser.parse_args())
 
-    control_json :dict = browser._CloudReview._link_ctrl_json(kwargs['operation_ctrl_filepath'])
+    control_json :dict = browser.CloudReview._link_ctrl_json(kwargs['operation_ctrl_filepath'])
     tb_name = control_json['tb_name']
     brow = browser.AdminBrowser(kwargs['header_filepath'],10)
 

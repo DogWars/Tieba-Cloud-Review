@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-__all__ = ('_CloudReview',)
+__all__ = ('CloudReview',)
 
 
 
@@ -44,9 +44,9 @@ else:
 
 
 
-class _CloudReview(AdminBrowser):
+class CloudReview(AdminBrowser):
     """
-    _CloudReview(headers_filepath,ctrl_filepath)
+    CloudReview(headers_filepath,ctrl_filepath)
 
     云审查基类
         参数: raw_headers 字典 包含cookies的原始头
@@ -57,7 +57,7 @@ class _CloudReview(AdminBrowser):
     def __init__(self,headers_filepath,ctrl_filepath):
         self.ctrl_filepath = ctrl_filepath
         review_control = self._link_ctrl_json(ctrl_filepath)
-        super(_CloudReview,self).__init__(headers_filepath,review_control['admin_type'])
+        super(CloudReview,self).__init__(headers_filepath,review_control['admin_type'])
 
         try:
             self.tb_name = review_control['tieba_name']
@@ -103,7 +103,7 @@ class _CloudReview(AdminBrowser):
     def quit(self):
         self.mydb.commit()
         self.mydb.close()
-        super(_CloudReview,self).quit()
+        super(CloudReview,self).quit()
 
 
     def _mysql_add_pid(self,pid):

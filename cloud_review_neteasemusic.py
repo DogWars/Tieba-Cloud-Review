@@ -14,7 +14,7 @@ PATH = os.path.split(os.path.realpath(__file__))[0].replace('\\','/')
 
 
 
-class CloudReview(browser._CloudReview):
+class CloudReview(browser.CloudReview):
     def __init__(self,raw_headers,ctrl_filepath):
         super(CloudReview,self).__init__(raw_headers,ctrl_filepath)
 
@@ -23,7 +23,7 @@ class CloudReview(browser._CloudReview):
         super(CloudReview,self).quit()
 
 
-    def __check_thread(self,thread:browser._App_Thread):
+    def __check_thread(self,thread:browser.App_Thread):
         """
         检查thread内容
         """
@@ -58,7 +58,7 @@ class CloudReview(browser._CloudReview):
         return False
 
 
-    def __check_post(self,post:browser._App_Post):
+    def __check_post(self,post:browser.App_Post):
         """
         检查回复内容
         """

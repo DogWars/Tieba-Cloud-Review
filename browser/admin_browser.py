@@ -11,11 +11,11 @@ import pickle
 
 import requests as req
 
-from ._browser import _Browser
+from ._browser import Browser
 
 
 
-class AdminBrowser(_Browser):
+class AdminBrowser(Browser):
     """
     提供百度贴吧管理员相关功能
     AdminBrowser(self,headers_filepath:str,admin_type:int)
@@ -82,7 +82,7 @@ class AdminBrowser(_Browser):
         except AttributeError:
             self.log.error('AttributeError: Failed to block!')
 
-        self.old_block_content = self._app_sign(self.old_block_content)
+        self.old_block_content = self.__app_sign(self.old_block_content)
 
         retry_times = 3
         while retry_times:

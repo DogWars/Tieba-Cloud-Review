@@ -1,12 +1,12 @@
 ﻿#!/usr/bin/env python
 # -*- coding:utf-8 -*-
-__all__ = ('_Browser',
-           '_Web_Thread',
-           '_Web_Post',
-           '_Web_Comment',
-           '_App_Thread',
-           '_App_Post',
-           '_App_Comment',
+__all__ = ('Browser',
+           'Web_Thread',
+           'Web_Post',
+           'Web_Comment',
+           'App_Thread',
+           'App_Post',
+           'App_Comment',
            'SCRIPT_PATH',
            'FILENAME',
            'SHOTNAME')
@@ -90,7 +90,7 @@ class _User_Dict(dict):
 
 
 
-class _Web_Thread():
+class Web_Thread():
     """
     主题帖信息
 
@@ -118,7 +118,7 @@ class _Web_Thread():
 
 
 
-class _App_Thread(_Web_Thread):
+class App_Thread(Web_Thread):
     """
     主题帖信息
 
@@ -148,7 +148,7 @@ class _App_Thread(_Web_Thread):
 
 
     def __init__(self):
-        super(_App_Thread,self).__init__()
+        super(App_Thread,self).__init__()
         pass
 
 
@@ -165,7 +165,7 @@ class _App_Thread(_Web_Thread):
 
 
 
-class _Web_Post():
+class Web_Post():
     """
     楼层信息
 
@@ -205,7 +205,7 @@ class _Web_Post():
 
 
 
-class _App_Post(_Web_Post):
+class App_Post(Web_Post):
     """
     楼层信息
 
@@ -247,7 +247,7 @@ class _App_Post(_Web_Post):
 
 
     def __init__(self):
-        super(_App_Post,self).__init__()
+        super(App_Post,self).__init__()
         pass
 
 
@@ -284,7 +284,7 @@ class _App_Post(_Web_Post):
 
 
 
-class _Web_Comment():
+class Web_Comment():
     """
     楼中楼信息
 
@@ -312,7 +312,7 @@ class _Web_Comment():
 
 
 
-class _App_Comment(_Web_Comment):
+class App_Comment(Web_Comment):
     """
     楼中楼信息
 
@@ -344,7 +344,7 @@ class _App_Comment(_Web_Comment):
 
 
     def __init__(self):
-        super(_App_Comment,self).__init__()
+        super(App_Comment,self).__init__()
         pass
 
 
@@ -422,10 +422,10 @@ class _Headers():
 
 
 
-class _Browser():
+class Browser():
     """
     贴吧浏览、参数获取等API的封装
-    _Browser(headers_filepath:str)
+    Browser(headers_filepath:str)
     """
 
 
@@ -459,7 +459,7 @@ class _Browser():
 
     def __init__(self,headers_filepath:str):
         """
-        _Browser(headers_filepath:str)
+        Browser(headers_filepath:str)
         """
 
         if not os.path.exists(PATH + '/log'):
@@ -504,7 +504,6 @@ class _Browser():
         self.start_time = time.time()
 
 
-
     def quit(self):
         """
         自动缓存fid信息
@@ -518,12 +517,10 @@ class _Browser():
         self.log.debug('Time cost:{t:.3f}'.format(t=time.time() - self.start_time))
 
 
-
     @staticmethod
     def _is_nick_name(name:str):
         name = str(name)
         return True if re.search('[^\u4e00-\u9fa5\w]',name) else False
-
 
 
     def _is_vip(self,keyword:str):
@@ -557,7 +554,6 @@ class _Browser():
             return None
 
 
-
     def _is_self_vip(self):
         self._set_host(self.self_info_api)
         portrait = None
@@ -584,13 +580,11 @@ class _Browser():
         return self._is_vip(portrait)
 
 
-
     def _set_host(self,url:str):
         try:
             self.account.headers['Host'] = re.search('://(.+?)/',url).group(1)
         except AttributeError:
             self.log.warning('Wrong type of url "{url}"!'.format(url=url))
-
 
 
     def _get_tbs(self):
@@ -613,7 +607,6 @@ class _Browser():
 
         self.log.error("Failed to get tbs")
         return ''
-
 
 
     def _get_fid(self,tb_name:str):
@@ -665,7 +658,6 @@ class _Browser():
         return data
 
 
-
     def _get_portrait(self,name:str):
         name = str(name)
         if not self._is_nick_name(name):
@@ -705,7 +697,6 @@ class _Browser():
 
         self.log.error("Failed to get portrait of {name}".format(name=name))
         return ''
-
 
 
     def _get_user_id(self,name:str):
@@ -749,14 +740,13 @@ class _Browser():
         return ''
 
 
-
     def _web_get_threads(self,tb_name,pn=0):
         """
         获取首页帖子
-        _get_threads(tb_name,pn=0)
+        _web_get_threads(tb_name,pn=0)
 
         返回值:
-            list(_Web_Thread)
+            list(Web_Thread)
         """
 
         threads = []
@@ -784,7 +774,7 @@ class _Browser():
 
         for raw in raws:
             try:
-                thread = _Web_Thread()
+                thread = Web_Thread()
                 thread.tid = int(re.search('href="/p/(\d*)', raw).group(1))
                 thread.pid = re.search('"first_post_id":(.*?),', raw).group(1)
                 thread.title = html.unescape(re.search('href="/p/.*?" title="([\s\S]*?)"', raw).group(1))
@@ -800,15 +790,14 @@ class _Browser():
         return threads
 
 
-
     def _web_get_posts(self,tid,pn=1):
         """
         获取帖子回复
-        _get_post(tid,pn=1)
+        _web_get_posts(tid,pn=1)
 
         返回值:
             has_next: 是否还有下一页
-            list(_Web_Post)
+            list(Web_Post)
         """
 
         self._set_host(self.tieba_post_url)
@@ -841,7 +830,7 @@ class _Browser():
         try:
             posts = content.find_all("div",{'data-field':True,'data-pid':True})
             for post_raw in posts:
-                post = _Web_Post()
+                post = Web_Post()
                 post.tid = tid
 
                 text_raw = post_raw.find("div",id=re.compile('^post_content_\d+$'))
@@ -879,15 +868,14 @@ class _Browser():
             return has_next,post_list
 
 
-
     def _web_get_comments(self,tid,pid,pn=1):
         """
         获取楼中楼回复
-        _get_comment(tid,pid,pn=1)
+        _web_get_comments(tid,pid,pn=1)
 
         返回值:
             has_next: 是否还有下一页
-            list(_Web_Comment)
+            list(Web_Comment)
         """   
 
         self._set_host(self.comment_url)
@@ -917,7 +905,7 @@ class _Browser():
             has_next = True if content.find('a',string='下一页') else False
 
             for comment_raw in raws:
-                comment = _Web_Comment()
+                comment = Web_Comment()
                 comment_data = json.loads(comment_raw['data-field'])
                 comment.tid = tid
                 comment.pid = comment_data['spid']
@@ -944,7 +932,6 @@ class _Browser():
             return False,[]
 
 
-
     def _app_get_threads(self,tb_name,pn=1,rn=30):
         """
         使用客户端api获取帖子
@@ -954,7 +941,7 @@ class _Browser():
             tb_name: 字符串 贴吧名
             rn: 整型 每页帖子数
         返回值:
-            list(_App_Thread)
+            list(App_Thread)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
@@ -996,7 +983,7 @@ class _Browser():
 
         threads = []
         for thread_raw in main_json['thread_list']:
-            thread = _App_Thread()
+            thread = App_Thread()
             thread.tid = thread_raw['tid']
             thread.pid = thread_raw['first_post_id']
 
@@ -1013,7 +1000,6 @@ class _Browser():
         return threads
 
 
-
     def _app_get_posts(self,tid,pn=1,rn=30):
         """
         使用客户端api获取回复
@@ -1025,7 +1011,7 @@ class _Browser():
             rn: 整型 每页帖子数
         返回值:
             has_next: 是否还有下一页
-            list(_App_Post)
+            list(App_Post)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
@@ -1068,7 +1054,7 @@ class _Browser():
 
         posts = []
         for post_raw in main_json['post_list']:
-            post = _App_Post()
+            post = App_Post()
             post.tid = tid
             post.pid = post_raw['id']
 
@@ -1095,7 +1081,6 @@ class _Browser():
         return has_next,posts
 
 
-
     def _app_get_comments(self,tid,pid,pn=1):
         """
         使用客户端api获取回复
@@ -1107,7 +1092,7 @@ class _Browser():
             pn: 整型 页数
         返回值:
             has_next: 是否还有下一页
-            list(_App_Comment)
+            list(App_Comment)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
@@ -1150,7 +1135,7 @@ class _Browser():
 
         comments = []
         for comment_raw in main_json['subpost_list']:
-            comment = _App_Comment()
+            comment = App_Comment()
             comment.tid = int(tid)
             comment.pid = comment_raw['id']
 
