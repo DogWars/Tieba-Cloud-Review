@@ -477,11 +477,19 @@ class _Browser():
             else:
                 file_handler = logging.FileHandler(log_filepath,encoding='utf-8')
 
-        formatter = logging.Formatter("<%(asctime)s> [%(levelname)s]  %(message)s","%Y-%m-%d %H:%M:%S")
+        stream_handler = logging.StreamHandler(sys.stdout)
+
+        file_handler.setLevel(logging.INFO)
+        stream_handler.setLevel(logging.DEBUG)
+
+        formatter = logging.Formatter("<%(asctime)s> [%(levelname)s] %(message)s","%Y-%m-%d %H:%M:%S")
         file_handler.setFormatter(formatter)
+        stream_handler.setFormatter(formatter)
+
         self.log = logging.getLogger(__name__)
         self.log.addHandler(file_handler)
-        self.log.setLevel(logging.INFO)
+        self.log.addHandler(stream_handler)
+        self.log.setLevel(logging.DEBUG)
 
         self.fid_cache_filepath = PATH + '/cache/fid_cache.pk'
         try:
@@ -492,6 +500,8 @@ class _Browser():
             self.fid_dict = {}
 
         self.account = _Headers(headers_filepath)
+
+        self.start_time = time.time()
 
 
 
@@ -504,6 +514,8 @@ class _Browser():
                 pickle.dump(self.fid_dict,pickle_file)
         except AttributeError:
             self.log.warning("Failed to save fid cache!")
+
+        self.log.debug('Time cost:{t:.3f}'.format(t=time.time() - self.start_time))
 
 
 
@@ -972,11 +984,13 @@ class _Browser():
             retry_times-=1
             time.sleep(0.5)
 
-        if not raw:
-            self.log.error("Failed to get posts of {tid}".format(tid=tid))
-            return False,[]
-
-        main_json = json.loads(raw,strict=False)
+        try:
+            main_json = json.loads(raw,strict=False)
+            if int(main_json['error_code']):
+                raise(ValueError('error_code is not 0'))
+        except(json.JSONDecodeError,ValueError):
+            self.log.error("Failed to get threads of {tb_name}".format(tb_name=tb_name))
+            return []
 
         users = _User_Dict(main_json['user_list'])
 
@@ -1040,12 +1054,14 @@ class _Browser():
             retry_times-=1
             time.sleep(0.5)
 
-        if not raw:
+        try:
+            main_json = json.loads(raw,strict=False)
+            if int(main_json['error_code']):
+                raise(ValueError('error_code is not 0'))
+        except(json.JSONDecodeError,ValueError):
             self.log.error("Failed to get posts of {tid}".format(tid=tid))
             return False,[]
 
-        main_json = json.loads(raw,strict=False)
-        
         thread_owner_id = main_json["thread"]['author']['id']
 
         users = _User_Dict(main_json['user_list'])
@@ -1120,10 +1136,17 @@ class _Browser():
             time.sleep(0.5)
 
         if not raw:
-            self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
             return False,[]
 
         main_json = json.loads(raw,strict=False)
+
+        try:
+            main_json = json.loads(raw,strict=False)
+            if int(main_json['error_code']):
+                raise(ValueError('error_code is not 0'))
+        except(json.JSONDecodeError,ValueError):
+            self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
+            return False,[]
 
         comments = []
         for comment_raw in main_json['subpost_list']:

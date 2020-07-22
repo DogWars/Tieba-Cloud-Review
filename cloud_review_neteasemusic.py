@@ -8,14 +8,20 @@ import argparse
 import re
 import browser
 
+
+
 PATH = os.path.split(os.path.realpath(__file__))[0].replace('\\','/')
+
+
 
 class CloudReview(browser._CloudReview):
     def __init__(self,raw_headers,ctrl_filepath):
         super(CloudReview,self).__init__(raw_headers,ctrl_filepath)
 
+
     def quit(self):
         super(CloudReview,self).quit()
+
 
     def __check_thread(self,thread:browser._App_Thread):
         """
@@ -32,20 +38,25 @@ class CloudReview(browser._CloudReview):
             return True
 
         posts = self._app_get_posts(thread.tid,9999)[1]
-        if posts and posts[0].floor == 1 and posts[0].level < 7 and re.search(re.compile('互关|互粉|互吗|选互|选关$|】互$|分享.{0,10}创建的歌单|刚申请.{0,10}音乐人|拼.{0,5}会员|微信.{0,10}群|http://music\.163\.com/artist'),thread.title):
-            return True
-        if posts and posts[0].floor == 1 and posts[0].level == 1 and re.search(re.compile('一起听|来听歌|一起网(易|抑)(云|☁)'),thread.title):
-            if re.search(re.compile('怎|哪|何|啥|问'),thread.title):
-                return False
-            else:
+        if posts and posts[0].floor == 1 and posts[0].level < 7:
+            huguan_exp = re.compile('互关|互粉|互吗|选互|选关$|】互$|分享.{0,10}创建的歌单|刚申请.{0,10}音乐人|拼.{0,5}会员|微信.{0,10}群|http://music\.163\.com/artist')
+            if re.search(huguan_exp,thread.title) or re.search(huguan_exp,posts[0].text):
                 return True
-        if posts and posts[0].floor == 1 and posts[0].level < 5 and not posts[0].imgs and len(posts[0].text) < 9 and len(thread.title) < 15:
+            listen_together_exp = re.compile('一起听|来听歌|一起网(易|抑)(云|☁)')
+            if posts[0].level == 1:
+                if re.search(listen_together_exp,thread.title) or re.search(listen_together_exp,posts[0].text):
+                    if re.search(re.compile('怎|哪|何|啥|问'),thread.title):
+                        return False
+                    else:
+                        return True
+        if posts and posts[0].floor == 1 and posts[0].level < 3 and not posts[0].imgs and len(posts[0].text) < 12 and len(thread.title) < 9:
             return True
         for post in posts:
             if self.__check_post(post):
                 self.log.info("Try to delete reply {text} post by {user_name}/{nick_name}".format(text=post.text,user_name=post.user_name,nick_name=post.nick_name))
                 self._del_post(self.tb_name,post.tid,post.pid)
         return False
+
 
     def __check_post(self,post:browser._App_Post):
         """
@@ -65,7 +76,7 @@ class CloudReview(browser._CloudReview):
                         'day':10})
             return True
         if re.search(re.compile('暑假工|临时工|兼职|主播|声播|主持|模特|陪玩|手游|礼物|底薪',re.I),post.text) and post.level < 8:
-            if post.level<4:
+            if post.level < 4:
                 self.block({'tb_name':self.tb_name,
                             'user_name':post.user_name,
                             'nick_name':post.nick_name,
@@ -117,6 +128,7 @@ class CloudReview(browser._CloudReview):
 
         return False
 
+
     def run_review(self):
         while self.cycle_times != 0:
             threads = self._app_get_threads(self.tb_name)
@@ -137,19 +149,20 @@ class CloudReview(browser._CloudReview):
         self.log.debug("Quit the program controlled by cycle_times")
 
 
-parser = argparse.ArgumentParser(description='Scan tieba threads')
-parser.add_argument('--review_ctrl_filepath','-rc',
-                    type=str,
-                    default=PATH + '/user_control/' + browser.SHOTNAME + '.json',
-                    help='path of the review control json | default value for example.py is ./user_control/example.json')
-parser.add_argument('--header_filepath','-hp',
-                    type=str,
-                    default=PATH + '/user_control/headers.txt',
-                    help='path of the headers txt | default value is ./user_control/headers.txt')
-kwargs = vars(parser.parse_args())
 
-review = CloudReview(kwargs['header_filepath'],kwargs['review_ctrl_filepath'])
+if __name__ == '__main__':
 
-review.run_review()
+    parser = argparse.ArgumentParser(description='Scan tieba threads')
+    parser.add_argument('--review_ctrl_filepath','-rc',
+                        type=str,
+                        default=PATH + '/user_control/' + browser.SHOTNAME + '.json',
+                        help='path of the review control json | default value for example.py is ./user_control/example.json')
+    parser.add_argument('--header_filepath','-hp',
+                        type=str,
+                        default=PATH + '/user_control/headers.txt',
+                        help='path of the headers txt | default value is ./user_control/headers.txt')
+    kwargs = vars(parser.parse_args())
 
-review.quit()
+    review = CloudReview(kwargs['header_filepath'],kwargs['review_ctrl_filepath'])
+    review.run_review()
+    review.quit()

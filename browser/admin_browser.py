@@ -43,8 +43,8 @@ class AdminBrowser(_Browser):
     top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
     top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
     top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
-    admin_add_api='http://tieba.baidu.com/bawu2/platform/addBawuMember'
-    admin_del_api='http://tieba.baidu.com/bawu2/platform/delBawuMember'
+    admin_add_api = 'http://tieba.baidu.com/bawu2/platform/addBawuMember'
+    admin_del_api = 'http://tieba.baidu.com/bawu2/platform/delBawuMember'
 
 
     def __init__(self,headers_filepath:str,admin_type:int):
@@ -670,10 +670,10 @@ class AdminBrowser(_Browser):
         if self._is_nick_name(name):
             return False
 
-        types=['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
+        types = ['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
         try:
-            cid=int(cid)
-            _type=types[cid]
+            cid = int(cid)
+            _type = types[cid]
         except(ValueError):
             self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
@@ -715,10 +715,10 @@ class AdminBrowser(_Browser):
         if self._is_nick_name(name):
             return False
 
-        types=['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
+        types = ['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
         try:
-            cid=int(cid)
-            _type=types[cid]
+            cid = int(cid)
+            _type = types[cid]
         except(ValueError):
             self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
