@@ -2,6 +2,8 @@
 # -*- coding:utf-8 -*-
 __all__ = ('AdminBrowser',)
 
+
+
 import time
 
 import re
@@ -10,6 +12,8 @@ import pickle
 import requests as req
 
 from ._browser import _Browser
+
+
 
 class AdminBrowser(_Browser):
     """
@@ -20,6 +24,8 @@ class AdminBrowser(_Browser):
         headers_filepath: 字符串 消息头文件路径
         admin_type: 整型 吧务权限最高允许的封禁天数
     """
+
+
     old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
     del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
     del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
@@ -29,14 +35,16 @@ class AdminBrowser(_Browser):
 
     recover_api = 'http://tieba.baidu.com/bawu2/platform/resPost'
     unblock_api = 'http://tieba.baidu.com/bawu2/platform/cancelFilter'
-    good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
     good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
+    good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
     blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
     blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
     top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
     top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
     top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
     top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
+    admin_add_api='http://tieba.baidu.com/bawu2/platform/addBawuMember'
+    admin_del_api='http://tieba.baidu.com/bawu2/platform/delBawuMember'
 
 
     def __init__(self,headers_filepath:str,admin_type:int):
@@ -74,8 +82,7 @@ class AdminBrowser(_Browser):
         except AttributeError:
             self.log.error('AttributeError: Failed to block!')
 
-        sign = self._get_sign(self.old_block_content)
-        self.old_block_content['sign'] = sign
+        self.old_block_content = self._app_sign(self.old_block_content)
 
         retry_times = 3
         while retry_times:
@@ -87,13 +94,11 @@ class AdminBrowser(_Browser):
             else:
                 if res.status_code == 200 and re.search('"error_code":"0"',res.content.decode('unicode_escape')):
                     self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=block['user_name'],tb_name=block['tb_name'],day=self.old_block_content['day']))
-                    del self.old_block_content['sign']
                     return True
             retry_times-=1
             time.sleep(0.25)
 
         self.log.warning('Failed to block {name} in {tb_name}'.format(name=block['user_name'],tb_name=block['tb_name']))
-        del self.old_block_content['sign']
         return False
 
 
@@ -126,7 +131,7 @@ class AdminBrowser(_Browser):
                     self.log.warning('{user_name}已被屏蔽'.format(user_name=name))
                     return True
         else:
-            self.log.warning('Failed to block {user_name} in {tb_name}'.format(tb_name=block['tb_name'],user_name=name))
+            self.log.warning('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
             return False
 
         retry_times = 3
@@ -651,4 +656,94 @@ class AdminBrowser(_Browser):
             time.sleep(0.25)
 
         self.log.warning("Failed to cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        return False
+
+
+    def _add_admin(self,tb_name,name,cid=0):
+        """
+        添加吧务
+        _add_admin(tb_name,name,cid=0)
+
+        参数:
+            cid: 整型 序号代表待添加类型，对应列表['小吧主','图片小编','语音小编','视频小编','广播小编']
+        """
+        if self._is_nick_name(name):
+            return False
+
+        types=['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
+        try:
+            cid=int(cid)
+            _type=types[cid]
+        except(ValueError):
+            self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+            return False
+        payload = {'ie':'utf-8',
+                   'tbs':self._get_tbs(),
+                   'word':tb_name,
+                   'type':_type,
+                   'user_id':self._get_user_id(name)
+                   }
+
+        self._set_host(self.admin_add_api)
+        retry_times = 5
+        while retry_times:
+            try:
+                res = req.post(self.admin_add_api,
+                               data = payload,
+                               headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
+                    self.log.info("Success add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    return True
+            retry_times-=1
+            time.sleep(0.25)
+
+        self.log.warning("Failed to add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        return False
+
+
+    def _del_admin(self,tb_name,name,cid=0):
+        """
+        删除吧务
+        _del_admin(tb_name,name,cid=0)
+
+        参数:
+            cid: 整型 序号代表待删除类型，对应列表['小吧主','图片小编','语音小编','视频小编','广播小编']
+        """
+        if self._is_nick_name(name):
+            return False
+
+        types=['assist','picadmin','voiceadmin','videoadmin','broadcast_admin']
+        try:
+            cid=int(cid)
+            _type=types[cid]
+        except(ValueError):
+            self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+            return False
+        payload = {'ie':'utf-8',
+                   'tbs':self._get_tbs(),
+                   'word':tb_name,
+                   'type':_type,
+                   'user_id':self._get_user_id(name)
+                   }
+
+        self._set_host(self.admin_del_api)
+        retry_times = 5
+        while retry_times:
+            try:
+                res = req.post(self.admin_del_api,
+                               data = payload,
+                               headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
+                    self.log.info("Success delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    return True
+            retry_times-=1
+            time.sleep(0.25)
+
+        self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
         return False

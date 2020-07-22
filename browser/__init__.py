@@ -18,4 +18,4 @@
 
 from .admin_browser import AdminBrowser,_Browser
 from .cloud_review import _CloudReview
-from ._browser import _Browser,_Thread,_Post,_Comment,SCRIPT_PATH,FILENAME,SHOTNAME
+from._browser import _Browser,_Web_Thread,_Web_Post,_Web_Comment,_App_Thread,_App_Post,_App_Comment,SCRIPT_PATH,FILENAME,SHOTNAME

@@ -2,6 +2,8 @@
 # -*- coding:utf-8 -*-
 __all__ = ('_CloudReview',)
 
+
+
 import os
 import sys
 import platform
@@ -23,6 +25,8 @@ import pyzbar.pyzbar as pyzbar
 from .admin_browser import AdminBrowser
 from ._browser import SHOTNAME
 
+
+
 DB_NAME = 'tieba_imgs'  # 数据库名
 system = platform.system()
 if system == 'Linux':
@@ -38,6 +42,8 @@ else:
         'passwd':''
         }
 
+
+
 class _CloudReview(AdminBrowser):
     """
     _CloudReview(headers_filepath,ctrl_filepath)
@@ -46,6 +52,7 @@ class _CloudReview(AdminBrowser):
         参数: raw_headers 字典 包含cookies的原始头
               ctrl_filepath 字符串 控制云审查行为的json的路径
     """
+
 
     def __init__(self,headers_filepath,ctrl_filepath):
         self.ctrl_filepath = ctrl_filepath
@@ -92,15 +99,18 @@ class _CloudReview(AdminBrowser):
 
         self.mycursor.execute("CREATE TABLE IF NOT EXISTS {table_name} (id INT AUTO_INCREMENT PRIMARY KEY, pid BIGINT)".format(table_name=self.table_name))
 
+
     def quit(self):
         self.mydb.commit()
         self.mydb.close()
         super(_CloudReview,self).quit()
 
+
     def _mysql_add_pid(self,pid):
         """
         向MySQL中插入pid
         """
+
         try:
             self.mycursor.execute("INSERT INTO {table_name} VALUES (NULL,{pid})".format(table_name=self.table_name,pid=pid))
         except(mysql.connector.errors.OperationalError):
@@ -108,10 +118,12 @@ class _CloudReview(AdminBrowser):
         else:
             self.mydb.commit()
 
+
     def _mysql_search_pid(self,pid):
         """
         检索MySQL中是否已有pid
         """
+
         try:
             self.mycursor.execute("SELECT pid FROM {table_name} WHERE pid={pid}".format(table_name=self.table_name,pid=pid))
         except(mysql.connector.errors.OperationalError):
@@ -152,6 +164,7 @@ class _CloudReview(AdminBrowser):
             return data
         else:
             return None
+
 
     @staticmethod
     def _link_ctrl_json(ctrl_filepath):

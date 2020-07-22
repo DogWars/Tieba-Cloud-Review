@@ -43,6 +43,7 @@ except AttributeError:
 block_id = browser.AdminBrowser(kwargs['header_filepath'],admin_type)
 
 for block in block_list:
-    block_id.block(block)
-    time.sleep(1)
+    if block.get('user_name','') or block.get('nick_name',''):
+        block_id.block(block)
+        time.sleep(1)
 block_id.quit()
