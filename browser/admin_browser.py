@@ -82,7 +82,7 @@ class AdminBrowser(Browser):
         except AttributeError:
             self.log.error('AttributeError: Failed to block!')
 
-        self.old_block_content = self.__app_sign(self.old_block_content)
+        self.old_block_content = self._app_sign(self.old_block_content)
 
         retry_times = 3
         while retry_times:
