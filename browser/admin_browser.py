@@ -7,11 +7,68 @@ __all__ = ('AdminBrowser',)
 import time
 
 import re
+import json
 import pickle
 
 import requests as req
 
-from ._browser import Browser
+from ._browser import Browser,_Basic_API
+
+
+
+class _Admin_API(_Basic_API):
+    """
+    贴吧管理员功能相关api
+    """
+
+
+    __slots__ = ('old_del_api',
+                 'del_post_api',
+                 'del_thread_api',
+                 'del_threads_api',
+                 'old_block_api',
+                 'new_block_api',
+
+                 'recover_api',
+                 'unblock_api',
+                 'good_add_api',
+                 'good_cancel_api',
+                 'blacklist_add_api',
+                 'blacklist_cancel_api',
+                 'top_add_api',
+                 'top_vipadd_api',
+                 'top_cancel_api',
+                 'top_vipcancel_api',
+                 'admin_add_api',
+                 'admin_del_api',
+                 'appeal_list_api',
+                 'appeal_handle_api')
+
+
+    def __init__(self):
+        super(_Admin_API,self).__init__()
+
+        self.old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
+        self.del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
+        self.del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
+        self.del_threads_api = 'https://tieba.baidu.com/f/commit/thread/batchDelete'
+        self.old_block_api = 'http://c.tieba.baidu.com/c/c/bawu/commitprison'
+        self.new_block_api = 'http://tieba.baidu.com/pmc/blockid'
+
+        self.recover_api = 'http://tieba.baidu.com/bawu2/platform/resPost'
+        self.unblock_api = 'http://tieba.baidu.com/bawu2/platform/cancelFilter'
+        self.good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
+        self.good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
+        self.blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
+        self.blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
+        self.top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
+        self.top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
+        self.top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
+        self.top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
+        self.admin_add_api = 'http://tieba.baidu.com/bawu2/platform/addBawuMember'
+        self.admin_del_api = 'http://tieba.baidu.com/bawu2/platform/delBawuMember'
+        self.appeal_list_api = 'http://tieba.baidu.com/bawu2/appeal/list'
+        self.appeal_handle_api = 'http://tieba.baidu.com/bawu2/appeal/commit'
 
 
 
@@ -26,26 +83,7 @@ class AdminBrowser(Browser):
     """
 
 
-    old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
-    del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
-    del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
-    del_threads_api = 'https://tieba.baidu.com/f/commit/thread/batchDelete'
-    old_block_api = 'http://c.tieba.baidu.com/c/c/bawu/commitprison'
-    new_block_api = 'http://tieba.baidu.com/pmc/blockid'
-
-    recover_api = 'http://tieba.baidu.com/bawu2/platform/resPost'
-    unblock_api = 'http://tieba.baidu.com/bawu2/platform/cancelFilter'
-    good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
-    good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
-    blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
-    blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
-    top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
-    top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
-    top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
-    top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
-    admin_add_api = 'http://tieba.baidu.com/bawu2/platform/addBawuMember'
-    admin_del_api = 'http://tieba.baidu.com/bawu2/platform/delBawuMember'
-
+    __slots__ = ('admin_type',)
 
     def __init__(self,headers_filepath:str,admin_type:int):
         super(AdminBrowser,self).__init__(headers_filepath)
@@ -54,15 +92,7 @@ class AdminBrowser(Browser):
         except AttributeError:
             raise(AttributeError('Incorrect format!'))
 
-        self.old_block_content = {'BDUSS':self.account.cookies['BDUSS'],
-                                  'day':1,
-                                  'fid':'',
-                                  'ntn':'banid',
-                                  'reason':'null',
-                                  'tbs':'',
-                                  'un':'',
-                                  'word':'',
-                                  'z':'4623534287'}
+        self.api = _Admin_API()
 
 
     def quit(self):
@@ -74,84 +104,110 @@ class AdminBrowser(Browser):
         使用旧版api的封禁，适用于权限不足的情况，且被封禁用户必须有用户名
         """
         try:
-            self.old_block_content['day'] = block['day']
-            self.old_block_content['fid'] = self._get_fid(block['tb_name'])
-            self.old_block_content['tbs'] = self._get_tbs()
-            self.old_block_content['un'] = block['user_name']
-            self.old_block_content['word'] = block['tb_name']
-        except AttributeError:
-            self.log.error('AttributeError: Failed to block!')
+            payload = {'BDUSS':self.account.cookies['BDUSS'],
+                       'day':block['day'],
+                       'fid':self._get_fid(block['tb_name']),
+                       'ntn':'banid',
+                       'reason':'null',
+                       'tbs':self._get_tbs(),
+                       'un':block['user_name'],
+                       'word':block['tb_name'],
+                       'z':'4623534287'
+                       }
+        except KeyError:
+            self.log.error('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
+            return False,block
 
-        self.old_block_content = self._app_sign(self.old_block_content)
+        payload = self._app_sign(payload)
 
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.old_block_api,
-                               data=self.old_block_content)
+                res = req.post(self.api.old_block_api,
+                               data=payload)
             except(req.exceptions.RequestException):
                 pass
             else:
                 if res.status_code == 200 and re.search('"error_code":"0"',res.content.decode('unicode_escape')):
-                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=block['user_name'],tb_name=block['tb_name'],day=self.old_block_content['day']))
-                    return True
+                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=block['user_name'],tb_name=block['tb_name'],day=payload['day']))
+                    return True,block
             retry_times-=1
-            time.sleep(0.25)
 
-        self.log.warning('Failed to block {name} in {tb_name}'.format(name=block['user_name'],tb_name=block['tb_name']))
-        return False
+        self.log.error('Failed to block {name} in {tb_name}'.format(name=block['user_name'],tb_name=block['tb_name']))
+        return False,block
 
 
-    def _new_block(self,block,name_type:str='username'):
+    def _new_block(self,block):
         """
         使用新版api的封禁，适用于权限充足或需要封禁无用户名用户（仅有带emoji昵称）的情况
         """
-        new_block_content = {"ie":"gbk"}
-        new_block_content['reason'] = block['reason'] if block.__contains__('reason') else 'null'
+        payload = {"ie":"gbk"}
+        payload['reason'] = block.get('reason','null')
 
         try:
-            new_block_content['day'] = block['day'] if block['day'] < self.admin_type else self.admin_type
-            new_block_content['fid'] = self._get_fid(block['tb_name'])
-            new_block_content['tbs'] = self._get_tbs()
-        except AttributeError:
+            payload['day'] = block['day'] if block['day'] < self.admin_type else self.admin_type
+            payload['fid'] = self._get_fid(block['tb_name'])
+            payload['tbs'] = self._get_tbs()
+        except KeyError:
             self.log.error('AttributeError: Failed to block!')
 
-        if block.get('user_name',''):
+        if block.get('user_name',None):
             name = block['user_name']
-            new_block_content['user_name[]'] = block['user_name']
-        elif block.get('nick_name',''):
-            name = block['nick_name']
-            new_block_content['nick_name[]'] = block['nick_name']
-            if block.get('portrait',''):
-                new_block_content['portrait[]'] = block['portrait']
+            payload['user_name[]'] = name
+            if block.__contains__('nick_name'):
+                del block['nick_name']
+            if block.__contains__('portrait'):
+                del block['portrait']
+
+        elif block.get('portrait',None):
+            user_name,nick_name = self._get_name(block['portrait'])
+            if user_name:
+                name = user_name
+                payload['user_name[]'] = user_name
+                block['user_name'] = user_name
+            elif nick_name:
+                name = nick_name
+                payload['nick_name[]'] = nick_name
+                block['nick_name'] = nick_name
+                payload['portrait[]'] = block['portrait']
             else:
-                try:
-                    new_block_content['portrait[]'] = self._get_portrait(name)
-                except AttributeError:
-                    self.log.warning('{user_name}已被屏蔽'.format(user_name=name))
-                    return True
+                self.log.error('Failed to block {portrait} in {tb_name}'.format(portrait=block['portrait'],tb_name=block['tb_name']))
+                block['reason'] = 'ERROR'
+                return False,block
+
+        elif block.get('nick_name',None):
+            name = block['nick_name']
+            portrait = self._get_portrait(name)
+            if not portrait:
+                self.log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=block['tb_name']))
+                block['reason'] = 'ERROR'
+                return False,block
+            payload['nick_name[]'] = name
+            block['portrait'] = portrait
+            payload['portrait[]'] = portrait
+
         else:
-            self.log.warning('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
-            return False
+            self.log.error('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
+            block['reason'] = 'ERROR'
+            return False,block
 
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.new_block_api,
-                               data=new_block_content,
+                res = req.post(self.api.new_block_api,
+                               data=payload,
                                headers=self.account.headers)
             except(req.exceptions.RequestException):
                 pass
             else:
                 if res.status_code == 200 and re.search('"errno":0',res.content.decode('unicode_escape')):
-                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=name,tb_name=block['tb_name'],day=new_block_content['day']))
-                    return True
+                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=name,tb_name=block['tb_name'],day=payload['day']))
+                    return True,block
             retry_times-=1
-            time.sleep(0.25)
 
-
-        self.log.warning('Failed to block {name} in {tb_name}'.format(name=name,tb_name=block['tb_name']))
-        return False
+        self.log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=block['tb_name']))
+        block['reason'] = 'ERROR'
+        return False,block
 
 
     def block(self,block):
@@ -171,10 +227,10 @@ class AdminBrowser(Browser):
                 }
         """
 
-        if block['day'] > self.admin_type and block['user_name']:
-            self._old_block(block)
+        if block['day'] > self.admin_type and block.get('user_name',''):
+            return self._old_block(block)
         else:
-            self._new_block(block)
+            return self._new_block(block)
 
 
     def _del_thread(self,tb_name,tid):
@@ -189,12 +245,12 @@ class AdminBrowser(Browser):
                    'fid':self._get_fid(tb_name),
                    'tid':tid
                    }
-        self._set_host(self.del_thread_api)
+        self._set_host(self.api.del_thread_api)
 
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.del_thread_api,
+                res = req.post(self.api.del_thread_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -222,12 +278,12 @@ class AdminBrowser(Browser):
                    'tid':'_'.join([str(tid) for tid in tids]),
                    'isBan':0
                    }
-        self._set_host(self.del_threads_api)
+        self._set_host(self.api.del_threads_api)
 
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.del_threads_api,
+                res = req.post(self.api.del_threads_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -258,12 +314,12 @@ class AdminBrowser(Browser):
                    'pid':pid,
                    'is_finf':'false'
                    }
-        self._set_host(self.del_post_api)
+        self._set_host(self.api.del_post_api)
 
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.del_post_api,
+                res = req.post(self.api.del_post_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -287,7 +343,7 @@ class AdminBrowser(Browser):
         参数:
             name: 字符串 用户名或昵称
         """
-        if not (tid or tb_name):
+        if not (tb_name or name):
             return False
 
         name = str(name)
@@ -297,11 +353,11 @@ class AdminBrowser(Browser):
                    'user_id':self._get_user_id(name)
                    }
 
-        self._set_host(self.blacklist_add_api)
+        self._set_host(self.api.blacklist_add_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.blacklist_add_api,
+                res = req.post(self.api.blacklist_add_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -336,11 +392,11 @@ class AdminBrowser(Browser):
         if not count:
             return False
 
-        self._set_host(self.blacklist_add_api)
+        self._set_host(self.api.blacklist_add_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.blacklist_cancel_api,
+                res = req.post(self.api.blacklist_cancel_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -399,15 +455,15 @@ class AdminBrowser(Browser):
                 pid = '0'
             payload['list[{count}][thread_id]'.format(count=count)] = tid
             payload['list[{count}][post_id]'.format(count=count)] = pid
-            payload['list[{count}][post_type]'.format(count=count)] = 0 if str(pid) == '0' else 1
+            payload['list[{count}][post_type]'.format(count=count)] = 0 if int(pid) == 0 else 1
         if not count:
             return False
 
-        self._set_host(self.recover_api)
+        self._set_host(self.api.recover_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.recover_api,
+                res = req.post(self.api.recover_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -458,11 +514,11 @@ class AdminBrowser(Browser):
         if not count:
             return False
 
-        self._set_host(self.unblock_api)
+        self._set_host(self.api.unblock_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.unblock_api,
+                res = req.post(self.api.unblock_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -511,11 +567,11 @@ class AdminBrowser(Browser):
                    'cid':cid
                    }
 
-        self._set_host(self.good_add_api)
+        self._set_host(self.api.good_add_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.good_add_api,
+                res = req.post(self.api.good_add_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -546,11 +602,11 @@ class AdminBrowser(Browser):
                    'tid':tid
                    }
 
-        self._set_host(self.good_cancel_api)
+        self._set_host(self.api.good_cancel_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.good_cancel_api,
+                res = req.post(self.api.good_cancel_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -584,11 +640,11 @@ class AdminBrowser(Browser):
                    'tid':tid
                    }
         if use_vip and self._is_self_vip():
-            api = self.top_vipadd_api
+            api = self.api.top_vipadd_api
             payload['props_id'] = 1180001
         else:
             use_vip = False
-            api = self.top_add_api
+            api = self.api.top_add_api
 
         self._set_host(api)
         retry_times = 5
@@ -625,11 +681,11 @@ class AdminBrowser(Browser):
                    'tid':tid
                    }
 
-        self._set_host(self.top_vipcancel_api)
+        self._set_host(self.api.top_vipcancel_api)
         retry_times = 2
         while retry_times:
             try:
-                res = req.post(self.top_vipcancel_api,
+                res = req.post(self.api.top_vipcancel_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -639,11 +695,11 @@ class AdminBrowser(Browser):
                     break
             retry_times-=1
 
-        self._set_host(self.top_cancel_api)
+        self._set_host(self.api.top_cancel_api)
         retry_times = 3
         while retry_times:
             try:
-                res = req.post(self.top_cancel_api,
+                res = req.post(self.api.top_cancel_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -684,11 +740,11 @@ class AdminBrowser(Browser):
                    'user_id':self._get_user_id(name)
                    }
 
-        self._set_host(self.admin_add_api)
+        self._set_host(self.api.admin_add_api)
         retry_times = 5
         while retry_times:
             try:
-                res = req.post(self.admin_add_api,
+                res = req.post(self.api.admin_add_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -729,11 +785,11 @@ class AdminBrowser(Browser):
                    'user_id':self._get_user_id(name)
                    }
 
-        self._set_host(self.admin_del_api)
+        self._set_host(self.api.admin_del_api)
         retry_times = 5
         while retry_times:
             try:
-                res = req.post(self.admin_del_api,
+                res = req.post(self.api.admin_del_api,
                                data = payload,
                                headers = self.account.headers)
             except(req.exceptions.RequestException):
@@ -747,3 +803,95 @@ class AdminBrowser(Browser):
 
         self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
         return False
+
+
+    def _refuse_appeals(self,tb_name):
+        """
+        拒绝吧内所有申诉
+        """
+
+        def __appeal_handle(appeal_id,refuse=True):
+            """
+            拒绝或通过申诉
+            __appeal_handle(appeal_id,refuse=True)
+
+            参数:
+                appeal_id: 整型 申诉请求的编号
+                refuse: 布尔 是否拒绝申诉
+            """
+            payload = {'status':2 if refuse else 1,
+                       'reason':'null',
+                       'tbs':self._get_tbs(),
+                       'appeal_id':appeal_id,
+                       'forum_id':self._get_fid(tb_name),
+                       'ie':'gbk'
+                       }
+
+            self._set_host(self.api.appeal_handle_api)
+            retry_times = 5
+            while retry_times:
+                try:
+                    res = req.post(self.api.appeal_handle_api,
+                                   data = payload,
+                                   headers = self.account.headers)
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
+                        self.log.info("Success handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+                        return True
+                retry_times-=1
+                time.sleep(0.25)
+
+            self.log.warning("Failed to handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+            return False
+
+        def __get_appeal_list(pn=1):
+            """
+            获取吧申诉列表
+            __get_appeal_list(pn=1)
+
+            参数:
+                pn: 整型 页数
+            """
+            params = {'forum_id':self._get_fid(tb_name),
+                      'page':pn
+                      }
+            self._set_host(self.api.appeal_list_api)
+            retry_times = 5
+            while retry_times:
+                try:
+                    res = req.get(self.api.appeal_list_api,
+                                  params = params,
+                                  headers = self.account.headers)
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200:
+                        raw = res.text
+                        break
+                retry_times-=1
+                time.sleep(0.5)
+
+            try:
+                main_json = json.loads(raw,strict=False)
+                if int(main_json['errno']):
+                    raise(ValueError('error_code is not 0'))
+            except(json.JSONDecodeError,ValueError):
+                self.log.error("Failed to get appeal_list of {tb_name}".format(tb_name=tb_name))
+                return False,[]
+
+            if int(main_json['pageInfo']['totalPage']):
+                has_next = True
+            else:
+                has_next = False
+
+            appeal_ids = [int(raw['appeal_id']) for raw in main_json['appealRecordList']]
+
+            return has_next,appeal_ids
+
+        has_next = True
+        while has_next:
+            has_next,appeal_ids = __get_appeal_list()
+            for appeal_id in appeal_ids:
+                __appeal_handle(appeal_id)

@@ -6,14 +6,12 @@ __all__ = ('CloudReview',)
 
 import os
 import sys
+import time
 import platform
 from io import BytesIO
-import warnings
 
 import re
 import json
-
-import time
 
 import requests as req
 import mysql.connector
@@ -21,13 +19,16 @@ from urllib.parse import unquote
 
 from PIL import Image
 import pyzbar.pyzbar as pyzbar
+import imagehash
+
+import pypinyin as pinyin
 
 from .admin_browser import AdminBrowser
 from ._browser import SHOTNAME
 
 
 
-DB_NAME = 'tieba_imgs'  # 数据库名
+DB_NAME = 'tieba_pid_whitelist'  # 数据库名
 system = platform.system()
 if system == 'Linux':
     mysql_login = {
@@ -52,6 +53,15 @@ class CloudReview(AdminBrowser):
         参数: raw_headers 字典 包含cookies的原始头
               ctrl_filepath 字符串 控制云审查行为的json的路径
     """
+
+
+    __slots__ = ('ctrl_filepath',
+                 'tb_name',
+                 'sleep_time',
+                 'cycle_times',
+                 'table_name',
+                 'mydb',
+                 'mycursor')
 
 
     def __init__(self,headers_filepath,ctrl_filepath):
@@ -80,24 +90,21 @@ class CloudReview(AdminBrowser):
             self.mycursor = self.mydb.cursor()
             self.mycursor.execute("CREATE DATABASE {database}".format(database=DB_NAME))
             self.mycursor.execute("USE {database}".format(database=DB_NAME))
-            self.mycursor.execute("""
-            CREATE PROCEDURE auto_del()
-            BEGIN
-                DELETE FROM income WHERE DATE(time)<=DATE(DATE_SUB(NOW(),INTERVAL 30 DAY));
-            END
-            """)
-            self.mycursor.execute("""
-            CREATE EVENT IF NOT EXISTS event_auto_del
-            ON SCHEDULE EVERY 1 DAY STARTS '1980-01-01 00:00:00'
-            ON COMPLETION NOT PRESERVE ENABLE DO CALL auto_del();
-            """)
         except(mysql.connector.errors.DatabaseError):
             self.log.critical('Cannot link to the database!')
             raise(mysql.connector.errors.DatabaseError('Cannot link to the database!'))
         else:
             self.mycursor = self.mydb.cursor()
 
-        self.mycursor.execute("CREATE TABLE IF NOT EXISTS {table_name} (id INT AUTO_INCREMENT PRIMARY KEY, pid BIGINT)".format(table_name=self.table_name))
+        self.mycursor.execute("SHOW TABLES LIKE '{table_name}'".format(table_name=self.table_name))
+        if not self.mycursor.fetchone():
+            self.mycursor.execute("SET SQL_SAFE_UPDATES=False")
+            self.mycursor.execute("CREATE TABLE {table_name} (pid BIGINT NOT NULL PRIMARY KEY, author CHAR(36) NOT NULL, record_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP)".format(table_name=self.table_name))
+            self.mycursor.execute("""CREATE EVENT event_auto_del_{table_name}
+            ON SCHEDULE
+            EVERY 1 DAY STARTS '2000-01-01 00:00:00'
+            DO
+            DELETE FROM {table_name} WHERE record_time<(CURRENT_TIMESTAMP() + INTERVAL -15 DAY)""".format(table_name=self.table_name))
 
 
     def quit(self):
@@ -106,14 +113,14 @@ class CloudReview(AdminBrowser):
         super(CloudReview,self).quit()
 
 
-    def _mysql_add_pid(self,pid):
+    def _mysql_add_pid(self,pid,portrait):
         """
         向MySQL中插入pid
         """
 
         try:
-            self.mycursor.execute("INSERT INTO {table_name} VALUES (NULL,{pid})".format(table_name=self.table_name,pid=pid))
-        except(mysql.connector.errors.OperationalError):
+            self.mycursor.execute("INSERT IGNORE INTO {table_name} VALUES (%s,%s,DEFAULT)".format(table_name=self.table_name),(pid,portrait))
+        except(mysql.connector.errors.DatabaseError):
             self.log.error("MySQL Error: Failed to insert {pid}!".format(pid=pid))
         else:
             self.mydb.commit()
@@ -125,20 +132,25 @@ class CloudReview(AdminBrowser):
         """
 
         try:
-            self.mycursor.execute("SELECT pid FROM {table_name} WHERE pid={pid}".format(table_name=self.table_name,pid=pid))
-        except(mysql.connector.errors.OperationalError):
+            self.mycursor.execute("SELECT pid FROM {table_name} WHERE pid={pid} LIMIT 1".format(table_name=self.table_name,pid=pid))
+        except(mysql.connector.errors.DatabaseError):
             self.log.error("MySQL Error: Failed to select {pid}!".format(pid=pid))
             return False
         else:
             return True if self.mycursor.fetchone() else False
 
-    def _scan_QRcode(self,img_url):
+
+    def _url2image(self,img_url:str):
         """
-        扫描img_url指定的图像中的二维码
+        从链接获取静态图像
         """
 
+        if img_url.endswith('.gif'):
+            self.log.error('Failed to get gif {url}'.format(url=img_url))
+            return None
+
         self._set_host(img_url)
-        retry_times = 20
+        retry_times = 5
         image = None
         while retry_times:
             try:
@@ -158,6 +170,18 @@ class CloudReview(AdminBrowser):
             self.log.error('Failed to get image {url}'.format(url=img_url))
             return None
 
+        return image
+
+
+    def _scan_QRcode(self,img_url:str):
+        """
+        扫描img_url指定的图像中的二维码
+        """
+
+        image = self._url2image(img_url)
+        if not image:
+            return None
+
         raw = pyzbar.decode(image)
         if raw:
             data = unquote(raw[0].data.decode('utf-8'))
@@ -166,15 +190,47 @@ class CloudReview(AdminBrowser):
             return None
 
 
+    def _get_imgdhash(self,img_url):
+        """
+        获取链接图像的dhash值
+        """
+
+        image = self._url2image(img_url)
+        if not image:
+            return None
+
+        dhash = imagehash.dhash(image)
+        return dhash
+
+
+    def _homophones_check(self,check_str:str,words:list):
+        """
+        检查非常用谐音
+        """
+
+        def __get_pinyin(_str):
+            pinyin_list = pinyin.lazy_pinyin(_str,errors='ignore')
+            pinyin_str = ' '.join(pinyin_list)
+            return pinyin_str
+
+        check_pinyin=__get_pinyin(check_str)
+        for word in words:
+            if word not in check_str and __get_pinyin(word) in check_pinyin:
+                return True
+
+        return False
+
+
     @staticmethod
     def _link_ctrl_json(ctrl_filepath):
         """
         链接到一个控制用的json
         """
-
+        
         try:
             with open(ctrl_filepath,'r',encoding='utf-8-sig') as review_ctrl_file:
                 review_control = json.loads(review_ctrl_file.read())
         except(FileExistsError):
             raise(FileExistsError('review control json not exist! Please create it!'))
-        return review_control
+        else:
+            return review_control

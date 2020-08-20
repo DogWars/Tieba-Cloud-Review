@@ -39,7 +39,7 @@ SHOTNAME = os.path.splitext(FILENAME)[0]
 
 
 
-class _User():
+class _User(object):
     """
     用户属性，一般包括下列五项
 
@@ -47,7 +47,7 @@ class _User():
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
     level: 用户等级
-    gender: 性别
+    gender: 性别（0男1女2未知）
     """
 
 
@@ -90,7 +90,7 @@ class _User_Dict(dict):
 
 
 
-class Web_Thread():
+class Web_Thread(object):
     """
     主题帖信息
 
@@ -100,6 +100,8 @@ class Web_Thread():
     user_name: 发帖用户名
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
+    has_audio: 是否含有音频
+    has_video: 是否含有视频
     reply_num: 回复数
     """
 
@@ -110,6 +112,8 @@ class Web_Thread():
                  'user_name',
                  'nick_name',
                  'portrait',
+                 'has_audio',
+                 'has_video',
                  'reply_num')
 
 
@@ -125,26 +129,27 @@ class App_Thread(Web_Thread):
     tid: 帖子编号
     pid: 回复编号
     title: 标题
+    text: 首楼内容
     user_name: 发帖用户名
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
     gender: 性别
+    has_audio: 是否含有音频
+    has_video: 是否含有视频
     reply_num: 回复数
     like: 点赞数
     dislike: 点踩数
+    create_time: 10位时间戳，创建时间
+    last_time: 10位时间戳，最后回复时间
     """
 
 
-    __slots__ = ('tid',
-                 'pid',
-                 'title',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
+    __slots__ = ('text',
                  'gender',
-                 'reply_num',
                  'like',
-                 'dislike',)
+                 'dislike',
+                 'create_time',
+                 'last_time')
 
 
     def __init__(self):
@@ -164,8 +169,21 @@ class App_Thread(Web_Thread):
         self.gender = user.gender
 
 
+    def _init_content(self,content_fragments:list):
+        """
+        从回复内容的碎片列表中提取有用信息
+        _init_content(content_fragments:list)
+        """
 
-class Web_Post():
+        texts = []
+        for fragment in content_fragments:
+            if fragment['type'] in ['0','1','4','18']:
+                texts.append(fragment['text'])
+        self.text = ''.join(texts)
+
+
+
+class Web_Post(object):
     """
     楼层信息
 
@@ -178,7 +196,9 @@ class Web_Post():
     level: 用户等级
     floor: 楼层数
     is_thread_owner: 是否楼主
-    comment_num: 楼中楼回复数
+    has_audio: 是否含有音频
+    reply_num: 楼中楼回复数
+    create_time: 10位时间戳，创建时间
     sign: 签名图片
     imgs: 图片列表
     smileys: 表情列表
@@ -194,7 +214,9 @@ class Web_Post():
                  'level',
                  'floor',
                  'is_thread_owner',
-                 'comment_num',
+                 'has_audio',
+                 'reply_num',
+                 'create_time',
                  'sign',
                  'imgs',
                  'smileys')
@@ -218,8 +240,10 @@ class App_Post(Web_Post):
     level: 用户等级
     gender: 性别
     floor: 楼层数
+    has_audio: 是否含有音频
     is_thread_owner: 是否楼主
-    comment_num: 楼中楼回复数
+    reply_num: 楼中楼回复数
+    create_time: 10位时间戳，创建时间
     like: 点赞数
     dislike: 点踩数
     sign: 小尾巴文本
@@ -228,22 +252,9 @@ class App_Post(Web_Post):
     """
 
 
-    __slots__ = ('text',
-                 'tid',
-                 'pid',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
-                 'level',
-                 'gender',
-                 'floor',
-                 'is_thread_owner',
-                 'comment_num',
+    __slots__ = ('gender',
                  'like',
-                 'dislike',
-                 'sign',
-                 'imgs',
-                 'smileys')
+                 'dislike')
 
 
     def __init__(self):
@@ -260,13 +271,16 @@ class App_Post(Web_Post):
         texts = []
         self.imgs = []
         self.smileys = []
+        self.has_audio = False
         for fragment in content_fragments:
-            if fragment['type'] == '0':
+            if fragment['type'] in ['0','1','4','18']:
                 texts.append(fragment['text'])
             elif fragment['type'] == '2':
                 self.smileys.append(fragment['text'])
             elif fragment['type'] == '3':
                 self.imgs.append(fragment['origin_src'])
+            elif fragment['type'] == '10':
+                self.has_audio = True
         self.text = ''.join(texts)
 
 
@@ -284,7 +298,7 @@ class App_Post(Web_Post):
 
 
 
-class Web_Comment():
+class Web_Comment(object):
     """
     楼中楼信息
 
@@ -294,6 +308,8 @@ class Web_Comment():
     user_name: 发帖用户名
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
+    has_audio: 是否含有音频
+    create_time: 10位时间戳，创建时间
     smileys: 表情列表
     """
 
@@ -304,6 +320,8 @@ class Web_Comment():
                  'user_name',
                  'nick_name',
                  'portrait',
+                 'has_audio',
+                 'create_time',
                  'smileys')
 
 
@@ -323,6 +341,8 @@ class App_Comment(Web_Comment):
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
     level: 用户等级
+    has_audio: 是否含有音频
+    create_time: 10位时间戳，创建时间
     gender: 性别
     like: 点赞数
     dislike: 点踩数
@@ -330,17 +350,10 @@ class App_Comment(Web_Comment):
     """
 
 
-    __slots__ = ('text',
-                 'tid',
-                 'pid',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
-                 'level',
+    __slots__ = ('level',
                  'gender',
                  'like',
-                 'dislike',
-                 'smileys')
+                 'dislike')
 
 
     def __init__(self):
@@ -356,11 +369,14 @@ class App_Comment(Web_Comment):
 
         texts = []
         self.smileys = []
+        self.has_audio = False
         for fragment in content_fragments:
-            if fragment['type'] == '0':
+            if fragment['type'] in ['0','1','4']:
                 texts.append(fragment['text'])
             elif fragment['type'] == '2':
                 self.smileys.append(fragment['text'])
+            elif fragment['type'] == '10':
+                self.has_audio = True
         self.text = ''.join(texts)
 
 
@@ -378,17 +394,30 @@ class App_Comment(Web_Comment):
 
 
 
-class _Headers():
+class _Headers(object):
     """
     消息头
     """
 
 
-    __slots__ = ('headers','cookies')
+    __slots__ = ('headers','cookies','app_headers')
 
 
     def __init__(self,filepath):
         self.update(filepath)
+
+        self.app_headers = {'Content-Type':'multipart/form-data',
+                           'x_bd_data_type':'protobuf',
+                           'Charset':'UTF-8',
+                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVB11.7.8.0W',
+                           'User-Agent':'bdtb for Android 11.7.8.0',
+                           'Connection':'Keep-Alive',
+                           'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
+                           'Accept-Encoding':'gzip',
+                           'cuid':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
+                           'client_type':'2',
+                           'Host':'c.tieba.baidu.com',
+                           }
 
 
     def update(self,filepath:str):
@@ -406,8 +435,11 @@ class _Headers():
             with open(filepath,'r',encoding='utf-8') as header_file:
                 rd_lines = header_file.readlines()
                 for text in rd_lines:
-                    text = text.replace('\n','').split(':',1)
-                    self.headers[text[0].strip()] = text[1].strip()
+                    if re.match('GET|POST',text):
+                        continue
+                    else:
+                        text = text.replace('\n','').split(':',1)
+                        self.headers[text[0].strip()] = text[1].strip()
         except(FileExistsError):
             raise(FileExistsError('headers.txt not exist! Please create it from browser!'))
 
@@ -421,46 +453,77 @@ class _Headers():
             raise(AttributeError('raw_headers["cookies"] not found!'))
 
 
+    def _set_host(self,url):
+        try:
+            self.headers['Host'] = re.search('://(.+?)/',url).group(1)
+        except AttributeError:
+            return False
+        else:
+            return True
 
-class Browser():
+
+
+class _Basic_API(object):
+    """
+    贴吧浏览、参数获取等基本api
+    """
+
+
+    __slots__ = ('tieba_url',
+                 'tieba_post_url',
+                 'comment_url',
+                 'user_homepage_url',
+
+                 'tbs_api',
+                 'fid_api',
+                 'user_json_api',
+                 'panel_api',
+                 'self_info_api',
+
+                 'app_thread_api',
+                 'app_post_api',
+                 'app_comment_api')
+
+
+    def __init__(self):
+        self.tieba_url = 'http://tieba.baidu.com/f'
+        self.tieba_post_url = 'http://tieba.baidu.com/p/'
+        self.comment_url = 'http://tieba.baidu.com/p/comment'
+        self.user_homepage_url = 'https://tieba.baidu.com/home/main/'
+
+        self.tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
+        self.fid_api = 'http://tieba.baidu.com/sign/info'
+        self.user_json_api = 'http://tieba.baidu.com/i/sys/user_json'
+        self.panel_api = 'https://tieba.baidu.com/home/get/panel'
+        self.self_info_api = 'http://tieba.baidu.com/f/user/json_userinfo'
+
+        self.app_thread_api = 'http://c.tieba.baidu.com/c/f/frs/page'
+        self.app_post_api = 'http://c.tieba.baidu.com/c/f/pb/page'
+        self.app_comment_api = 'http://c.tieba.baidu.com/c/f/pb/floor'
+
+
+
+class Browser(object):
     """
     贴吧浏览、参数获取等API的封装
     Browser(headers_filepath:str)
     """
 
 
-    tieba_url = 'http://tieba.baidu.com/f'
-    tieba_post_url = 'http://tieba.baidu.com/p/'
-    comment_url = 'http://tieba.baidu.com/p/comment'
-    user_homepage_url = 'https://tieba.baidu.com/home/main/'
-
-    tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
-    fid_api = 'http://tieba.baidu.com/sign/info'
-    user_json_api = 'http://tieba.baidu.com/i/sys/user_json'
-    panel_api = 'https://tieba.baidu.com/home/get/panel'
-    self_info_api = 'http://tieba.baidu.com/f/user/json_userinfo'
-
-    app_thread_api = 'http://c.tieba.baidu.com/c/f/frs/page'
-    app_post_api = 'http://c.tieba.baidu.com/c/f/pb/page'
-    app_comment_api = 'http://c.tieba.baidu.com/c/f/pb/floor'
-    app_headers = {'Content-Type':'multipart/form-data',
-                   'x_bd_data_type':'protobuf',
-                   'Charset':'UTF-8',
-                   'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
-                   'User-Agent':'bdtb for Android 11.6.8.2',
-                   'Connection':'Keep-Alive',
-                   'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
-                   'Accept-Encoding':'gzip',
-                   'cuid':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
-                   'client_type':'2',
-                   'Host':'c.tieba.baidu.com',
-                   }
+    __slots__ = ('start_time',
+                 'log',
+                 'fid_cache_filepath',
+                 'fid_dict',
+                 'account',
+                 'api')
 
 
     def __init__(self,headers_filepath:str):
         """
         Browser(headers_filepath:str)
         """
+
+        self.start_time = time.time()
 
         if not os.path.exists(PATH + '/log'):
             os.mkdir(PATH + '/log')
@@ -501,7 +564,7 @@ class Browser():
 
         self.account = _Headers(headers_filepath)
 
-        self.start_time = time.time()
+        self.api = _Basic_API()
 
 
     def quit(self):
@@ -518,123 +581,17 @@ class Browser():
 
 
     @staticmethod
+    def timestamp2str(timestamp):
+        timestamp = int(timestamp)
+        time_local = time.localtime(timestamp)
+        _str = time.strftime("%Y-%m-%d %H:%M:%S",time_local)
+        return _str
+
+
+    @staticmethod
     def _is_nick_name(name:str):
         name = str(name)
-        return True if re.search('[^\u4e00-\u9fa5\w]',name) else False
-
-
-    def _is_vip(self,keyword:str):
-        if keyword.startswith('tb.'):
-            params = {'id':keyword}
-        else:
-            params = {'un':keyword}
-
-        self._set_host(self.panel_api)
-        retry_times = 3
-        while retry_times:
-            try:
-                res = req.get(self.panel_api,
-                              params=params,
-                              headers = self.account.headers)
-            except(req.exceptions.RequestException):
-                pass
-            else:
-                if res.status_code == 200:
-                    break
-            retry_times-=1
-            time.sleep(0.25)
-
-        if res.status_code == 200:
-            if re.search('"vipInfo":\[\]',res.text):
-                return False
-            else:
-                return True
-        else:
-            self.log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
-            return None
-
-
-    def _is_self_vip(self):
-        self._set_host(self.self_info_api)
-        portrait = None
-        retry_times = 2
-        while retry_times:
-            try:
-                res = req.get(self.self_info_api,
-                              headers = self.account.headers)
-            except(req.exceptions.RequestException):
-                pass
-            else:
-                if res.status_code == 200:
-                    raw = re.search('"user_portrait":"([\w.-]+)',res.text)
-                    if raw:
-                        portrait = raw.group(1)
-                        break
-            retry_times-=1
-            time.sleep(0.25)
-
-        if not portrait:
-            self.log.error("Failed to get self info")
-            return None
-
-        return self._is_vip(portrait)
-
-
-    def _set_host(self,url:str):
-        try:
-            self.account.headers['Host'] = re.search('://(.+?)/',url).group(1)
-        except AttributeError:
-            self.log.warning('Wrong type of url "{url}"!'.format(url=url))
-
-
-    def _get_tbs(self):
-        self._set_host(self.tbs_api)
-        retry_times = 5
-        while retry_times:
-            try:
-                res = req.get(self.tbs_api,
-                              headers = self.account.headers)
-            except(req.exceptions.RequestException):
-                pass
-            else:
-                if res.status_code == 200:
-                    raw = re.search('"tbs":"([a-z\d]+)',res.text)
-                    if raw:
-                        tbs = raw.group(1)
-                        return tbs
-            retry_times-=1
-            time.sleep(0.25)
-
-        self.log.error("Failed to get tbs")
-        return ''
-
-
-    def _get_fid(self,tb_name:str):
-        if self.fid_dict.__contains__(tb_name):
-            return self.fid_dict[tb_name]
-        else:
-            self._set_host(self.fid_api)
-            retry_times = 10
-            while retry_times:
-                try:
-                    res = req.get(self.fid_api,
-                                  params={'kw':tb_name,'ie':'utf-8'},
-                                  headers = self.account.headers)
-                except(req.exceptions.RequestException):
-                    pass
-                else:
-                    if res.status_code == 200:
-                        raw = re.search('"forum_id":(\d+)', res.text)
-                        if raw:
-                            fid = raw.group(1)
-                            self.fid_dict[tb_name] = fid
-                            return fid
-                retry_times-=1
-                time.sleep(0.5)
-
-        self.log.critical("Failed to get fid of {name}".format(name=tb_name))
-        raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
-
+        return True if re.search('[^\u4e00-\u9fa5\w·]',name) else False
 
 
     @staticmethod
@@ -658,16 +615,130 @@ class Browser():
         return data
 
 
+    def _is_vip(self,keyword:str):
+        if keyword.startswith('tb.'):
+            params = {'id':keyword}
+        else:
+            params = {'un':keyword}
+
+        self._set_host(self.api.panel_api)
+        retry_times = 3
+        while retry_times:
+            try:
+                res = req.get(self.api.panel_api,
+                              params=params,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    break
+            retry_times-=1
+            time.sleep(0.25)
+
+        if res.status_code == 200:
+            if re.search('"vipInfo":\[\]',res.text):
+                return False
+            else:
+                return True
+        else:
+            self.log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
+            return None
+
+
+    def _is_self_vip(self):
+        self._set_host(self.api.self_info_api)
+        portrait = None
+        retry_times = 2
+        while retry_times:
+            try:
+                res = req.get(self.api.self_info_api,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"user_portrait":"([\w.-]+)',res.text)
+                    if raw:
+                        portrait = raw.group(1)
+                        break
+            retry_times-=1
+            time.sleep(0.25)
+
+        if not portrait:
+            self.log.error("Failed to get self info")
+            return None
+
+        return self._is_vip(portrait)
+
+
+    def _set_host(self,url:str):
+        if self.account._set_host(url):
+            return True
+        else:
+            self.log.warning('Wrong type of url "{url}"!'.format(url=url))
+            return False
+
+
+    def _get_tbs(self):
+        self._set_host(self.api.tbs_api)
+        retry_times = 5
+        while retry_times:
+            try:
+                res = req.get(self.api.tbs_api,
+                              headers = self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('"tbs":"([a-z\d]+)',res.text)
+                    if raw:
+                        tbs = raw.group(1)
+                        return tbs
+            retry_times-=1
+            time.sleep(0.25)
+
+        self.log.error("Failed to get tbs")
+        return ''
+
+
+    def _get_fid(self,tb_name:str):
+        if self.fid_dict.__contains__(tb_name):
+            return self.fid_dict[tb_name]
+        else:
+            self._set_host(self.api.fid_api)
+            retry_times = 10
+            while retry_times:
+                try:
+                    res = req.get(self.api.fid_api,
+                                  params={'kw':tb_name,'ie':'utf-8'},
+                                  headers = self.account.headers)
+                except(req.exceptions.RequestException):
+                    pass
+                else:
+                    if res.status_code == 200:
+                        raw = re.search('"forum_id":(\d+)', res.text)
+                        if raw:
+                            fid = raw.group(1)
+                            self.fid_dict[tb_name] = fid
+                            return fid
+                retry_times-=1
+                time.sleep(0.5)
+
+        self.log.critical("Failed to get fid of {name}".format(name=tb_name))
+        raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
+
+
     def _get_portrait(self,name:str):
         name = str(name)
         if not self._is_nick_name(name):
-            self._set_host(self.user_json_api)
+            self._set_host(self.api.user_json_api)
             retry_times = 2
             while retry_times:
                 try:
-                    res = req.get(self.user_homepage_url,
+                    res = req.get(self.api.user_homepage_url,
                                   params={'un':name},
-                                  headers=self.account.headers).text
+                                  headers=self.account.headers)
                 except(req.exceptions.RequestException):
                     pass
                 else:
@@ -678,11 +749,11 @@ class Browser():
                             return portrait
                 retry_times-=1
 
-        self._set_host(self.panel_api)
+        self._set_host(self.api.panel_api)
         retry_times = 2
         while retry_times:
             try:
-                res = req.get(self.panel_api,
+                res = req.get(self.api.panel_api,
                               params={'un':name},
                               headers=self.account.headers)
             except(req.exceptions.RequestException):
@@ -700,13 +771,12 @@ class Browser():
 
 
     def _get_user_id(self,name:str):
-        name = str(name)
         if not self._is_nick_name(name):
-            self._set_host(self.user_json_api)
+            self._set_host(self.api.user_json_api)
             retry_times = 2
             while retry_times:
                 try:
-                    res = req.get(self.user_homepage_url,
+                    res = req.get(self.api.user_homepage_url,
                                   params={'un':name},
                                   headers=self.account.headers)
                 except(req.exceptions.RequestException):
@@ -715,15 +785,15 @@ class Browser():
                     if res.status_code == 200:
                         raw = re.search('"id":(\d+)', res.text)
                         if raw:
-                            user_id = raw.group(1)
+                            user_id = int(raw.group(1))
                             return user_id
                 retry_times-=1
 
-        self._set_host(self.panel_api)
+        self._set_host(self.api.panel_api)
         retry_times = 2
         while retry_times:
             try:
-                res = req.get(self.panel_api,
+                res = req.get(self.api.panel_api,
                               params={'un':name},
                               headers=self.account.headers)
             except(req.exceptions.RequestException):
@@ -732,12 +802,52 @@ class Browser():
                 if res.status_code == 200:
                     raw = re.search('"id":(\d+)', res.text)
                     if raw:
-                        user_id = raw.group(1)
+                        user_id = int(raw.group(1))
                         return user_id
             retry_times-=1
 
         self.log.error("Failed to get user_id of {name}".format(name=name))
-        return ''
+        return 0
+
+
+    def _get_name(self,portrait:str):
+        """
+        用portrait获取user_name和nick_name
+
+        参数:
+            portrait: 字符串
+        返回值:
+            (user_name,nick_name)
+        """
+
+        if not portrait.startswith('tb.'):
+            self.log.error("Wrong portrait format {portrait}".format(portrait=portrait))
+            return ('','')
+
+        self._set_host(self.api.panel_api)
+        raw = None
+        retry_times = 3
+        while retry_times:
+            try:
+                res = req.get(self.api.panel_api,
+                              params={'id':portrait},
+                              headers=self.account.headers)
+            except(req.exceptions.RequestException):
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = json.loads(res.text)
+                    if raw['error'] == '成功':
+                        break
+            retry_times-=1
+
+        if not raw or not raw['error'] == '成功':
+            self.log.error("Failed to get user_id of {name}".format(name=name))
+            return ('','')
+
+        user_name = raw['data']['name']
+        nick_name = raw['data']['name_show']
+        return (user_name,nick_name)
 
 
     def _web_get_threads(self,tb_name,pn=0):
@@ -750,13 +860,13 @@ class Browser():
         """
 
         threads = []
-        self._set_host(self.tieba_url)
+        self._set_host(self.api.tieba_url)
         raws = []
-        retry_times = 20
+        retry_times = 25
         while retry_times:
             try:
-                res = req.get(self.tieba_url,
-                              params={'kw':tb_name,'pn':pn,'ie':'utf-8'},
+                res = req.get(self.api.tieba_url,
+                              params={'kw':tb_name,'pn':pn * 50,'ie':'utf-8'},
                               headers=self.account.headers)
             except(req.exceptions.RequestException):
                 pass
@@ -766,7 +876,6 @@ class Browser():
                     if raws:
                         break
             retry_times-=1
-            time.sleep(0.5)
 
         if not raws:
             self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
@@ -782,6 +891,8 @@ class Browser():
                 thread.user_name = re.search('''frs-author-name-wrap"><a rel="noreferrer"  data-field='{"un":"(.*?)",''',raw).group(1).encode('utf-8').decode('unicode_escape')
                 thread.nick_name = re.search('title="主题作者: (.*?)"', raw).group(1)
                 thread.portrait = re.search('id":"(.*?)"}',raw).group(1)
+                thread.has_audio = True if re.search('data-thread-type="11"',raw) else False
+                thread.has_video = True if re.search('data-thread-type="40"',raw) else False
             except(AttributeError):
                 continue
             else:
@@ -800,13 +911,13 @@ class Browser():
             list(Web_Post)
         """
 
-        self._set_host(self.tieba_post_url)
+        self._set_host(self.api.tieba_post_url)
 
         raw = None
-        retry_times = 20
+        retry_times = 25
         while retry_times:
             try:
-                res = req.get(self.tieba_post_url + str(tid),
+                res = req.get(self.api.tieba_post_url + str(tid),
                               params={'pn':pn},
                               headers=self.account.headers)
             except(req.exceptions.RequestException):
@@ -818,7 +929,6 @@ class Browser():
                         raw = raw.group()
                         break
             retry_times-=1
-            time.sleep(0.5)
 
         if not raw:
             self.log.error("Failed to get posts of {tid}".format(tid=tid))
@@ -850,6 +960,12 @@ class Browser():
 
                 post.is_thread_owner = True if post_raw.find("div",class_=re.compile('^louzhubiaoshi')) else False
 
+                post.has_audio = True if post_raw.find("div",class_=re.compile('^voice_player')) else False
+
+                time_raw = post_raw.find("span",class_='tail-info',text=re.compile('\d{4}-\d{2}-\d{2} \d{2}:\d{2}'))
+                time_array = time.strptime(time_raw.string, "%Y-%m-%d %H:%M")
+                post.create_time = int(time.mktime(time_array))
+
                 author_info = json.loads(post_raw["data-field"])
                 post.pid = author_info["content"]["post_id"]
                 post.user_name = author_info["author"]["user_name"]
@@ -857,7 +973,7 @@ class Browser():
                 post.portrait = re.search('[^?]*',author_info["author"]["portrait"]).group()
                 post.level = int(post_raw.find('div',attrs={'class':'d_badge_lv'}).text)
                 post.floor = int(author_info["content"]["post_no"])
-                post.comment_num = int(author_info["content"]["comment_num"])
+                post.reply_num = int(author_info["content"]["comment_num"])
 
                 post_list.append(post)
 
@@ -878,11 +994,11 @@ class Browser():
             list(Web_Comment)
         """   
 
-        self._set_host(self.comment_url)
-        retry_times = 20
+        self._set_host(self.api.comment_url)
+        retry_times = 25
         while retry_times:
             try:
-                res = req.get(self.comment_url,
+                res = req.get(self.api.comment_url,
                               params={'tid':tid,'pid':pid,'pn':pn},
                               headers=self.account.headers)
             except(req.exceptions.RequestException):
@@ -892,7 +1008,6 @@ class Browser():
                     raw = res.text
                     break
             retry_times-=1
-            time.sleep(0.5)
 
         if not raw:
             self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
@@ -920,6 +1035,12 @@ class Browser():
                 text_raw = comment_raw.find('span',class_='lzl_content_main')
                 comment.text = text_raw.text.strip()
 
+                comment.has_audio = True if comment_raw.find("div",class_=re.compile('^voice_player')) else False
+
+                time_raw = comment_raw.find('span',class_='lzl_time')
+                time_array = time.strptime(time_raw.string, "%Y-%m-%d %H:%M")
+                comment.create_time = int(time.mktime(time_array))
+
                 smileys_raw = text_raw.find_all('img',class_='BDE_Smiley')
                 comment.smileys = [i["src"] for i in smileys_raw]
 
@@ -935,10 +1056,11 @@ class Browser():
     def _app_get_threads(self,tb_name,pn=1,rn=30):
         """
         使用客户端api获取帖子
-        _app_get_threads(self,tb_name,rn=30)
+        _app_get_threads(tb_name,pn=1,rn=30)
 
         参数:
             tb_name: 字符串 贴吧名
+            pn: 整型 页数
             rn: 整型 每页帖子数
         返回值:
             list(App_Thread)
@@ -946,7 +1068,7 @@ class Browser():
 
         payload = {'_client_id':'wappc_1595296730520_220',
                    '_client_type':2,
-                   '_client_version':'11.6.8.2',
+                   '_client_version':'11.7.8.0',
                    '_phone_imei':'869346037118962',
                    'from':'tieba',
                    'kw':tb_name,
@@ -956,12 +1078,12 @@ class Browser():
                    'with_group':1
                    }
 
-        retry_times = 20
+        retry_times = 25
         while retry_times:
             try:
-                res = req.post(self.app_thread_api,
+                res = req.post(self.api.app_thread_api,
                                data=self._app_sign(payload),
-                               headers=self.app_headers)
+                               headers=self.account.app_headers)
             except(req.exceptions.RequestException):
                 pass
             else:
@@ -969,7 +1091,6 @@ class Browser():
                     raw = res.text
                     break
             retry_times-=1
-            time.sleep(0.5)
 
         try:
             main_json = json.loads(raw,strict=False)
@@ -984,16 +1105,25 @@ class Browser():
         threads = []
         for thread_raw in main_json['thread_list']:
             thread = App_Thread()
+
+            try:
+                thread._init_userinfo(users[thread_raw['author_id']])
+            except(KeyError):
+                continue
+
             thread.tid = thread_raw['tid']
             thread.pid = thread_raw['first_post_id']
 
             thread.title = thread_raw['title']
+            thread._init_content(thread_raw.get('first_post_content',[]))
+            thread.has_audio = True if thread_raw.get('voice_info',None) else False
+            thread.has_video = True if thread_raw.get('video_info',None) else False
             thread.like = int(thread_raw['agree_num'])
             thread.dislike = int(thread_raw['disagree_num'])
 
-            thread._init_userinfo(users[thread_raw['author_id']])
-
             thread.reply_num = int(thread_raw['reply_num'])
+            thread.create_time = int(thread_raw['create_time'])
+            thread.last_time = int(thread_raw['last_time_int'])
 
             threads.append(thread)
 
@@ -1025,12 +1155,12 @@ class Browser():
                    }
 
         raw = None
-        retry_times = 20
+        retry_times = 25
         while retry_times:
             try:
-                res = req.post(self.app_post_api,
+                res = req.post(self.api.app_post_api,
                                data=self._app_sign(payload),
-                               headers=self.app_headers)
+                               headers=self.account.app_headers)
             except(req.exceptions.RequestException):
                 pass
             else:
@@ -1038,7 +1168,6 @@ class Browser():
                     raw = res.text
                     break
             retry_times-=1
-            time.sleep(0.5)
 
         try:
             main_json = json.loads(raw,strict=False)
@@ -1055,10 +1184,14 @@ class Browser():
         posts = []
         for post_raw in main_json['post_list']:
             post = App_Post()
+
+            try:
+                post._init_userinfo(users[post_raw['author_id']])
+            except(KeyError):
+                continue
+
             post.tid = tid
             post.pid = post_raw['id']
-
-            post._init_userinfo(users[post_raw['author_id']])
 
             post._init_content(post_raw['content'])
             post.like = int(post_raw['agree']['agree_num'])
@@ -1066,7 +1199,8 @@ class Browser():
 
             post.is_thread_owner = True if post_raw['author_id'] == thread_owner_id else False
             post.floor = int(post_raw['floor'])
-            post.comment_num = int(post_raw['sub_post_number'])
+            post.reply_num = int(post_raw['sub_post_number'])
+            post.create_time = int(post_raw['time'])
 
             sign_text = ''
             if post_raw['signature']:
@@ -1097,7 +1231,7 @@ class Browser():
 
         payload = {'_client_id':'wappc_1595296730520_220',
                    '_client_type':'2',
-                   '_client_version':'11.6.8.2',
+                   '_client_version':'11.7.8.0',
                    '_phone_imei':'869346037118962',
                    'from':'tieba',
                    'kz':tid,
@@ -1105,12 +1239,12 @@ class Browser():
                    'pn':pn
                    }
 
-        retry_times = 20
+        retry_times = 25
         while retry_times:
             try:
-                res = req.post(self.app_comment_api,
+                res = req.post(self.api.app_comment_api,
                                data=self._app_sign(payload),
-                               headers=self.app_headers)
+                               headers=self.account.app_headers)
             except(req.exceptions.RequestException):
                 pass
             else:
@@ -1118,7 +1252,6 @@ class Browser():
                     raw = res.text
                     break
             retry_times-=1
-            time.sleep(0.5)
 
         if not raw:
             return False,[]
@@ -1148,7 +1281,9 @@ class Browser():
             comment.nick_name = author_info['name_show'] if author_info['name_show'] != author_info['name'] else None
             comment.portrait = re.search('[\w.-]+',author_info['portrait']).group()
             comment.level = int(author_info['level_id'])
-            comment.gender = int(author_info['gender'])
+            comment.gender = int(author_info['gender']) if author_info['gender'] else 2
+
+            comment.create_time = int(comment_raw['time'])
 
             comments.append(comment)
 
