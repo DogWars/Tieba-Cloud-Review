@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 __all__ = ('AdminBrowser',)
 
@@ -9,10 +8,11 @@ import time
 import re
 import json
 import pickle
+from bs4 import BeautifulSoup
 
 import requests as req
 
-from ._browser import Browser,_Basic_API
+from ._browser import Browser,_Basic_API,log
 
 
 
@@ -34,6 +34,7 @@ class _Admin_API(_Basic_API):
                  'good_add_api',
                  'good_cancel_api',
                  'blacklist_add_api',
+                 'blacklist_get_api',
                  'blacklist_cancel_api',
                  'top_add_api',
                  'top_vipadd_api',
@@ -60,6 +61,7 @@ class _Admin_API(_Basic_API):
         self.good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
         self.good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
         self.blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
+        self.blacklist_get_api = 'http://tieba.baidu.com/bawu2/platform/listBlackUser'
         self.blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
         self.top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
         self.top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
@@ -99,24 +101,25 @@ class AdminBrowser(Browser):
         super(AdminBrowser,self).quit()
 
 
-    def _old_block(self,block):
+    def _old_block(self,user,tb_name,day,reason = 'default'):
         """
         使用旧版api的封禁，适用于权限不足的情况，且被封禁用户必须有用户名
         """
+
         try:
             payload = {'BDUSS':self.account.cookies['BDUSS'],
-                       'day':block['day'],
-                       'fid':self._get_fid(block['tb_name']),
+                       'day':day,
+                       'fid':self._tbname2fid(tb_name),
                        'ntn':'banid',
                        'reason':'null',
                        'tbs':self._get_tbs(),
-                       'un':block['user_name'],
-                       'word':block['tb_name'],
+                       'un':user.user_name,
+                       'word':tb_name,
                        'z':'4623534287'
                        }
         except KeyError:
-            self.log.error('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
-            return False,block
+            log.error('Failed to block in {tb_name}'.format(tb_name=tb_name))
+            return False,user
 
         payload = self._app_sign(payload)
 
@@ -125,71 +128,71 @@ class AdminBrowser(Browser):
             try:
                 res = req.post(self.api.old_block_api,
                                data=payload)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"error_code":"0"',res.content.decode('unicode_escape')):
-                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=block['user_name'],tb_name=block['tb_name'],day=payload['day']))
-                    return True,block
+                    log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=user.user_name,tb_name=tb_name,day=day))
+                    return True,user
             retry_times-=1
 
-        self.log.error('Failed to block {name} in {tb_name}'.format(name=block['user_name'],tb_name=block['tb_name']))
-        return False,block
+        log.error('Failed to block {name} in {tb_name}'.format(name=user.user_name,tb_name=tb_name))
+        return False,user
 
 
-    def _new_block(self,block):
+    def _new_block(self,user,tb_name,day,reason = 'default'):
         """
         使用新版api的封禁，适用于权限充足或需要封禁无用户名用户（仅有带emoji昵称）的情况
         """
+
         payload = {"ie":"gbk"}
-        payload['reason'] = block.get('reason','null')
+        payload['reason'] = reason
+        regenerate_dict = {}
 
         try:
-            payload['day'] = block['day'] if block['day'] < self.admin_type else self.admin_type
-            payload['fid'] = self._get_fid(block['tb_name'])
+            payload['day'] = day if day < self.admin_type else self.admin_type
+            payload['fid'] = self._tbname2fid(tb_name)
             payload['tbs'] = self._get_tbs()
         except KeyError:
-            self.log.error('AttributeError: Failed to block!')
+            log.error('AttributeError: Failed to block!')
 
-        if block.get('user_name',None):
-            name = block['user_name']
+        if user.user_name:
+            name = user.user_name
+            regenerate_dict['user_name'] = name
             payload['user_name[]'] = name
-            if block.__contains__('nick_name'):
-                del block['nick_name']
-            if block.__contains__('portrait'):
-                del block['portrait']
 
-        elif block.get('portrait',None):
-            user_name,nick_name = self._get_name(block['portrait'])
+        elif user.portrait:
+            regenerate_dict['portrait'] = user.portrait
+            user_name,nick_name = self._portrait2names(user.portrait)
             if user_name:
                 name = user_name
                 payload['user_name[]'] = user_name
-                block['user_name'] = user_name
+                user.user_name = user_name
             elif nick_name:
                 name = nick_name
                 payload['nick_name[]'] = nick_name
-                block['nick_name'] = nick_name
-                payload['portrait[]'] = block['portrait']
+                user.nick_name = nick_name
+                payload['portrait[]'] = user.portrait
             else:
-                self.log.error('Failed to block {portrait} in {tb_name}'.format(portrait=block['portrait'],tb_name=block['tb_name']))
-                block['reason'] = 'ERROR'
-                return False,block
+                log.error('Failed to block {portrait} in {tb_name}'.format(portrait=user.portrait,tb_name=tb_name))
+                regenerate_dict['reason'] = 'ERROR'
+                return False,user
 
-        elif block.get('nick_name',None):
-            name = block['nick_name']
-            portrait = self._get_portrait(name)
+        elif user.nick_name:
+            name = user.nick_name
+            portrait = self._name2portrait(name)
             if not portrait:
-                self.log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=block['tb_name']))
-                block['reason'] = 'ERROR'
-                return False,block
+                log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=tb_name))
+                regenerate_dict['reason'] = 'ERROR'
+                return False,user
             payload['nick_name[]'] = name
-            block['portrait'] = portrait
             payload['portrait[]'] = portrait
+            user.portrait = portrait
 
         else:
-            self.log.error('Failed to block in {tb_name}'.format(tb_name=block['tb_name']))
-            block['reason'] = 'ERROR'
-            return False,block
+            log.error('Failed to block in {tb_name}'.format(tb_name=tb_name))
+            regenerate_dict['reason'] = 'ERROR'
+            return False,user
 
         retry_times = 3
         while retry_times:
@@ -197,40 +200,36 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.new_block_api,
                                data=payload,
                                headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"errno":0',res.content.decode('unicode_escape')):
-                    self.log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=name,tb_name=block['tb_name'],day=payload['day']))
-                    return True,block
+                    log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=name,tb_name=tb_name,day=payload['day']))
+                    return True,user
             retry_times-=1
 
-        self.log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=block['tb_name']))
-        block['reason'] = 'ERROR'
-        return False,block
+        log.error('Failed to block {name} in {tb_name}'.format(name=name,tb_name=tb_name))
+        regenerate_dict['reason'] = 'ERROR'
+        return False,user
 
 
-    def block(self,block):
+    def block(self,user,tb_name,day,reason = '极光 - 贴吧反广告墙'):
         """
         根据需求自动选择api进行封禁，以新版api为优先选择
         block(self,block)
 
         参数:
-            block:封禁请求
-                举例: 
-                {'tb_name':'吧名',
-                'user_name':'用户名',
-                'nick_name':'昵称',
-                'day':'封禁天数,
-                'portrait':'portrait（可选）',
-                'reason':'封禁理由（可选）'
-                }
+            user: UserInfo类 发布者信息
+            tb_name: 字符串 吧名
+            day: 整型 封禁天数
+            reason: 字符串 封禁理由（可选）
         """
 
-        if block['day'] > self.admin_type and block.get('user_name',''):
-            return self._old_block(block)
+        day = int(day)
+        if day > self.admin_type and user.user_name:
+            return self._old_block(user,tb_name,day,reason)
         else:
-            return self._new_block(block)
+            return self._new_block(user,tb_name,day,reason)
 
 
     def _del_thread(self,tb_name,tid):
@@ -242,7 +241,7 @@ class AdminBrowser(Browser):
                    'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid
                    }
         self._set_host(self.api.del_thread_api)
@@ -253,16 +252,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.del_thread_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -274,7 +273,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':'_'.join([str(tid) for tid in tids]),
                    'isBan':0
                    }
@@ -286,16 +285,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.del_threads_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Success delete thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
+                    log.info("Success delete thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to delete thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
+        log.warning("Failed to delete thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
         return False
 
 
@@ -308,7 +307,7 @@ class AdminBrowser(Browser):
                    'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid,
                    'is_vipdel':0,
                    'pid':pid,
@@ -322,16 +321,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.del_post_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
+                    log.info("Delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
+        log.warning("Failed to delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
         return False
 
 
@@ -360,23 +359,72 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.blacklist_add_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
         return False
+
+
+    def _blacklist_get(self,tb_name,pn = 1):
+        """
+        获取吧申诉列表
+        _blacklist_get(tb_name,pn=1)
+
+        参数:
+            tb_name: 字符串 贴吧名
+            pn: 整型 页数
+        """
+        params = {'word':tb_name,
+                  'pn':pn
+                  }
+        self._set_host(self.api.blacklist_get_api)
+        retry_times = 5
+        while retry_times:
+            try:
+                res = req.get(self.api.blacklist_get_api,
+                              params = params,
+                              headers = self.account.headers)
+            except req.exceptions.RequestException:
+                pass
+            else:
+                if res.status_code == 200:
+                    raw = re.search('<tbody>.*</tbody>',res.text,re.S)
+                    if raw:
+                        raw = raw.group()
+                        break
+            retry_times-=1
+            time.sleep(0.5)
+
+        if not raw:
+            log.error("Failed to get black_list of {tb_name}".format(tb_name=tb_name))
+            return False,[]
+
+        has_next = True if re.search('class="next_page"',res.text) else False
+        content = BeautifulSoup(raw,'lxml')
+        black_list = []
+        try:
+            blacks = content.find_all("tr")
+            for black_raw in blacks:
+                user_name = black_raw.find("a",class_='avatar_link').text.strip()
+                black_list.append(user_name)
+        except KeyError:
+            log.error("Failed to get black_list of {tb_name}".format(tb_name=tb_name))
+            return False,[]
+
+        return has_next,black_list
 
 
     def _blacklist_cancels(self,tb_name,names:list):
         """
         解除黑名单
-        _blacklist_add(tb_name,names:list)
+        _blacklist_cancels(tb_name,names:list)
 
         参数:
             names: 列表 用户名或昵称的列表
@@ -385,9 +433,9 @@ class AdminBrowser(Browser):
         count = 0
         for name in names:
             if name and type(name) == str:
-                user_id = self._get_user_id(name)
+                user_id = self._name2userid(name)
                 if user_id:
-                    payload.append(('list[]',self._get_user_id(name)))
+                    payload.append(('list[]',self._name2userid(name)))
                     count+=1
         if not count:
             return False
@@ -399,16 +447,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.blacklist_cancel_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
+                    log.info("Delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
+        log.warning("Failed to delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
         return False
 
 
@@ -445,8 +493,8 @@ class AdminBrowser(Browser):
                     tid,pid = tid_pid
                     if not tid:
                         continue
-                except(ValueError):
-                    self.log.error("Too many values to unpack in {item}".format(item=tid_pid))
+                except (ValueError):
+                    log.error("Too many values to unpack in {item}".format(item=tid_pid))
                     continue
             else:
                 tid = tid_pid
@@ -466,20 +514,20 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.recover_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
+                    log.info("Recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
+        log.warning("Failed to recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
         return False
 
 
-    def _recover(self,tb_name,tid,pid=0):
+    def _recover(self,tb_name,tid,pid = 0):
         """
         恢复帖子
         _recover(tb_name,tid,pid=0)
@@ -506,7 +554,7 @@ class AdminBrowser(Browser):
         count = 0
         for name in names:
             if name:
-                user_id = self._get_user_id(name)
+                user_id = self._name2userid(name)
                 if user_id:
                     payload['list[{count}][user_id]'.format(count=count)] = user_id
                     payload['list[{count}][user_name]'.format(count=count)] = name
@@ -521,16 +569,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.unblock_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Unblock {names} in {tb_name}".format(names=names,tb_name=tb_name))
+                    log.info("Unblock {names} in {tb_name}".format(names=names,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to unblock {names} in {tb_name}".format(names=names,tb_name=tb_name))
+        log.warning("Failed to unblock {names} in {tb_name}".format(names=names,tb_name=tb_name))
         return False
 
 
@@ -548,7 +596,7 @@ class AdminBrowser(Browser):
             return False
 
 
-    def _good_add(self,tb_name,tid,cid=0):
+    def _good_add(self,tb_name,tid,cid = 0):
         """
         加精
         _good_add(tb_name,tid,cid=0)
@@ -562,7 +610,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid,
                    'cid':cid
                    }
@@ -574,16 +622,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.good_add_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -598,7 +646,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid
                    }
 
@@ -609,20 +657,20 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.good_cancel_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
-    def _top_set(self,tb_name,tid,use_vip=True):
+    def _top_set(self,tb_name,tid,use_vip = True):
         """
         设置置顶
         _top_set(self,tb_name,tid,is_vip=True)
@@ -636,7 +684,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid
                    }
         if use_vip and self._is_self_vip():
@@ -653,16 +701,16 @@ class AdminBrowser(Browser):
                 res = req.post(api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Success top {tid} in {tb_name} with vip:{vip}".format(tid=tid,tb_name=tb_name,vip=use_vip))
+                    log.info("Success top {tid} in {tb_name} with vip:{vip}".format(tid=tid,tb_name=tb_name,vip=use_vip))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -677,7 +725,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
                    'kw':tb_name,
-                   'fid':self._get_fid(tb_name),
+                   'fid':self._tbname2fid(tb_name),
                    'tid':tid
                    }
 
@@ -688,7 +736,7 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.top_vipcancel_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
@@ -702,20 +750,20 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.top_cancel_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    self.log.info("Success cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Success cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
-    def _add_admin(self,tb_name,name,cid=0):
+    def _add_admin(self,tb_name,name,cid = 0):
         """
         添加吧务
         _add_admin(tb_name,name,cid=0)
@@ -730,8 +778,8 @@ class AdminBrowser(Browser):
         try:
             cid = int(cid)
             _type = types[cid]
-        except(ValueError):
-            self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        except (ValueError):
+            log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
@@ -747,20 +795,20 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.admin_add_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Success add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Success add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
         return False
 
 
-    def _del_admin(self,tb_name,name,cid=0):
+    def _del_admin(self,tb_name,name,cid = 0):
         """
         删除吧务
         _del_admin(tb_name,name,cid=0)
@@ -775,8 +823,8 @@ class AdminBrowser(Browser):
         try:
             cid = int(cid)
             _type = types[cid]
-        except(ValueError):
-            self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        except (ValueError):
+            log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
@@ -792,16 +840,16 @@ class AdminBrowser(Browser):
                 res = req.post(self.api.admin_del_api,
                                data = payload,
                                headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    self.log.info("Success delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Success delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
         return False
 
 
@@ -810,7 +858,7 @@ class AdminBrowser(Browser):
         拒绝吧内所有申诉
         """
 
-        def __appeal_handle(appeal_id,refuse=True):
+        def __appeal_handle(appeal_id,refuse = True):
             """
             拒绝或通过申诉
             __appeal_handle(appeal_id,refuse=True)
@@ -823,7 +871,7 @@ class AdminBrowser(Browser):
                        'reason':'null',
                        'tbs':self._get_tbs(),
                        'appeal_id':appeal_id,
-                       'forum_id':self._get_fid(tb_name),
+                       'forum_id':self._tbname2fid(tb_name),
                        'ie':'gbk'
                        }
 
@@ -834,19 +882,19 @@ class AdminBrowser(Browser):
                     res = req.post(self.api.appeal_handle_api,
                                    data = payload,
                                    headers = self.account.headers)
-                except(req.exceptions.RequestException):
+                except req.exceptions.RequestException:
                     pass
                 else:
                     if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                        self.log.info("Success handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+                        log.info("Success handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
                         return True
                 retry_times-=1
                 time.sleep(0.25)
 
-            self.log.warning("Failed to handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+            log.warning("Failed to handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
             return False
 
-        def __get_appeal_list(pn=1):
+        def __get_appeal_list(pn = 1):
             """
             获取吧申诉列表
             __get_appeal_list(pn=1)
@@ -854,7 +902,7 @@ class AdminBrowser(Browser):
             参数:
                 pn: 整型 页数
             """
-            params = {'forum_id':self._get_fid(tb_name),
+            params = {'forum_id':self._tbname2fid(tb_name),
                       'page':pn
                       }
             self._set_host(self.api.appeal_list_api)
@@ -864,7 +912,7 @@ class AdminBrowser(Browser):
                     res = req.get(self.api.appeal_list_api,
                                   params = params,
                                   headers = self.account.headers)
-                except(req.exceptions.RequestException):
+                except req.exceptions.RequestException:
                     pass
                 else:
                     if res.status_code == 200:
@@ -877,8 +925,8 @@ class AdminBrowser(Browser):
                 main_json = json.loads(raw,strict=False)
                 if int(main_json['errno']):
                     raise(ValueError('error_code is not 0'))
-            except(json.JSONDecodeError,ValueError):
-                self.log.error("Failed to get appeal_list of {tb_name}".format(tb_name=tb_name))
+            except (json.JSONDecodeError,ValueError):
+                log.error("Failed to get appeal_list of {tb_name}".format(tb_name=tb_name))
                 return False,[]
 
             if int(main_json['pageInfo']['totalPage']):

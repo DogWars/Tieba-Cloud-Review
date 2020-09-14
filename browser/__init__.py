@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding:utf-8 -*-
 """
 @Author: Starry
@@ -18,6 +17,6 @@
     用 [sudo pip install pyzbar] 来安装pyzbar
 """
 
+from ._browser import *
 from .admin_browser import *
 from .cloud_review import *
-from ._browser import *

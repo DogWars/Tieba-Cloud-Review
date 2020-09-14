@@ -35,13 +35,14 @@ import os
 import argparse
 
 import re
+import json
 import browser
 
 
 
 if __name__ == '__main__':
 
-    PATH = os.path.split(os.path.realpath(__file__))[0].replace('\\','/')
+    PATH = os.path.split(os.path.realpath(__file__))[0]
 
     parser = argparse.ArgumentParser(description='ADMIN OPERATION')
     parser.add_argument('--operation_ctrl_filepath','-oc',
@@ -54,47 +55,104 @@ if __name__ == '__main__':
                         help='path of the headers txt | default value is ./user_control/headers.txt')
     kwargs = vars(parser.parse_args())
 
-    control_json :dict = browser.CloudReview._link_ctrl_json(kwargs['operation_ctrl_filepath'])
-    tb_name = control_json['tb_name']
+
     brow = browser.AdminBrowser(kwargs['header_filepath'],10)
 
-    tid_pids = control_json.get('recover',[])
+
+    if os.access(kwargs['operation_ctrl_filepath'],os.F_OK | os.R_OK | os.W_OK):
+        with open(kwargs['operation_ctrl_filepath'],'r',encoding='utf-8-sig') as ctrl_file:
+            raw = ctrl_file.read()
+    else:
+        brow.log.critical('Permission denied !')
+        brow.quit()
+        os._exit(-1)
+
+
+    note = re.search('/\*.*\*/',raw,re.S)
+    if note:
+        note = note.group()
+    else:
+        note = ''
+    raw = raw.replace(note,'')
+    task_control = json.loads(raw)
+
+
+    tb_name = task_control['tb_name']
+
+
+    tid_pids = task_control.get('recover',[])
     if tid_pids:
-        brow._recovers(tb_name,tid_pids)
+        if brow._recovers(tb_name,tid_pids):
+            task_control['recover'] = []
 
-    unblocks = control_json.get('unblock',[])
+
+    unblocks = task_control.get('unblock',[])
     if unblocks:
-        brow._unblock_users(tb_name,unblocks)
+        if brow._unblock_users(tb_name,unblocks):
+            task_control['unblock'] = []
 
-    blacklist_adds = control_json.get('blacklist_add',[])
+
+    blacklist_adds = task_control.get('blacklist_add',[])
+    temp = []
     for name in blacklist_adds:
-        brow._blacklist_add(tb_name,name)
+        if not brow._blacklist_add(tb_name,name):
+            temp.append(name)
+    task_control['blacklist_add'] = temp
 
-    blacklist_cancels = control_json.get('blacklist_add',[])
-    brow._blacklist_cancels(tb_name,blacklist_cancels)
 
-    for item in control_json.get('good_add',[]):
+    blacklist_cancels = task_control.get('blacklist_cancel',[])
+    if brow._blacklist_cancels(tb_name,blacklist_cancels):
+        task_control['blacklist_cancel'] = []
+
+    temp = []
+    for item in task_control.get('good_add',[]):
         if type(item) == list:
             if len(item) == 2:
-                brow._good_add(tb_name,item[0],item[1])
+                if not brow._good_add(tb_name,item[0],item[1]):
+                    temp.append(item)
             else:
                 brow.log.error('Wrong length of {item}'.format(item=item))
         else:
-            brow._good_add(tb_name,item)
+            if not brow._good_add(tb_name,item):
+                temp.append(item)
+    task_control['good_add'] = temp
 
-    for tid in control_json.get('good_cancel',[]):
-        brow._good_cancel(tb_name,tid)
 
-    for item in control_json.get('top_set',[]):
+    temp = []
+    for tid in task_control.get('good_cancel',[]):
+        if not brow._good_cancel(tb_name,tid):
+            temp.append(tid)
+    task_control['good_cancel'] = temp
+
+
+    temp = []
+    for item in task_control.get('top_set',[]):
         if type(item) == list:
             if len(item) == 2:
-                brow._top_set(tb_name,item[0],item[1])
+                if not brow._top_set(tb_name,item[0],item[1]):
+                    temp.append(item)
             else:
                 brow.log.error('Wrong length of {item}'.format(item=item))
         else:
-            brow._top_set(tb_name,item)
+            if not brow._top_set(tb_name,item):
+                temp.append(item)
+    task_control['top_set'] = temp
 
-    for tid in control_json.get('top_cancel',[]):
-        brow._top_cancel(tb_name,tid)
+
+    temp = []
+    for tid in task_control.get('top_cancel',[]):
+        if not brow._top_cancel(tb_name,tid):
+            temp.append(tid)
+    task_control['top_cancel'] = temp
+
+
+    raw = json.dumps(task_control,ensure_ascii=False,indent=2,separators=(',',':'))
+    with open(kwargs['operation_ctrl_filepath'],'w',encoding='utf-8-sig') as ctrl_file:
+        ctrl_file.write(raw + '\n' + note)
+
+
+    if task_control.get('refuse_appeals',False):
+        brow._refuse_appeals(tb_name)
+
 
     brow.quit()

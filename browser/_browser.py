@@ -1,22 +1,21 @@
-﻿#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-__all__ = ('Browser',
+﻿# -*- coding:utf-8 -*-
+__all__ = ('UserInfo',
+           'Browser',
            'Web_Thread',
            'Web_Post',
            'Web_Comment',
-           'App_Thread',
-           'App_Post',
-           'App_Comment',
-           'SCRIPT_PATH',
-           'FILENAME',
-           'SHOTNAME')
+           'Thread',
+           'Post',
+           'Comment',
+           'SHOTNAME',
+           'log')
 
 
 
 import os
 import sys
 import time
-import logging
+import traceback
 from functools import wraps
 
 import hashlib
@@ -30,47 +29,45 @@ import html
 import pickle
 from bs4 import BeautifulSoup
 
+from ._logger import MyLogger,SHOTNAME
 
-
-PATH = os.path.split(os.path.realpath(__file__))[0].replace('\\','/')
-SCRIPT_PATH,FILENAME = os.path.split(os.path.realpath(sys.argv[0]))
-SCRIPT_PATH = SCRIPT_PATH.replace('\\','/')
-SHOTNAME = os.path.splitext(FILENAME)[0]
+log = MyLogger(__name__)
 
 
 
-class _User(object):
+PATH = os.path.split(os.path.realpath(__file__))[0]
+
+
+
+class UserInfo(object):
     """
     用户属性，一般包括下列五项
 
     user_name: 发帖用户名
     nick_name: 发帖人昵称
     portrait: 用户头像portrait值
-    level: 用户等级
-    gender: 性别（0男1女2未知）
+    gender: 性别（1男2女0未知）
     """
 
 
     __slots__ = ('user_name',
                  'nick_name',
                  'portrait',
-                 'level',
                  'gender')
 
 
-    def __init__(self,**kwargs):
-        self.user_name = kwargs.get('user_name',None)
-        self.nick_name = kwargs.get('nick_name',None)
-        self.portrait = kwargs.get('portrait',None)
-        self.level = kwargs.get('level',None)
-        self.gender = kwargs.get('gender',None)
+    def __init__(self):
+        self.user_name = ""
+        self.nick_name = ""
+        self.portrait = ""
+        self.gender = 0
 
 
 
-class _User_Dict(dict):
+class UserInfo_Dict(dict):
     """
     可按id检索用户的字典
-    _User_Dict(user_list:list)
+    UserInfo_Dict(user_list:list)
 
     参数:
         user_list: 列表 必须是从app接口获取的用户信息列表！
@@ -79,94 +76,173 @@ class _User_Dict(dict):
 
     def __init__(self,user_list:list):
         for user in user_list:
-            if user.get('name_show',None):
-                level_str = user.get('level_id',None)
-                _user = _User(user_name=user['name'] if user['name'] else None,
-                              nick_name=user['name_show'] if user['name_show'] != user['name'] else None,
-                              portrait=re.search('[\w.-]+',user['portrait']).group(),
-                              level=int(level_str) if level_str else None,
-                              gender=int(user['gender']) if user['gender'] else None)
-                self[user['id']] = _user
+            if not user.__contains__('name_show'):
+                continue
+
+            _user = UserInfo()
+
+            try:
+                if user.get('level_id',0):
+                    level = int(user['level_id'])
+                else:
+                    level = 0
+                _user.user_name = user.get('name','')
+                if user['name_show'] != user['name']:
+                    _user.nick_name = user['name_show']
+                _user.portrait = re.match('[\w.-]+',user['portrait']).group()
+                if user.get('gender',0):
+                    _user.gender = int(user['gender'])
+            except KeyError:
+                log.error(traceback.format_exc())
+
+            self[user['id']] = (_user,level)
 
 
 
-class Web_Thread(object):
+class BaseContent(object):
     """
-    主题帖信息
+    基本的内容信息
 
     tid: 帖子编号
     pid: 回复编号
-    title: 标题
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
-    has_audio: 是否含有音频
-    has_video: 是否含有视频
-    reply_num: 回复数
+    text: 文本内容
+    user: UserInfo类 发布者信息
     """
 
 
-    __slots__ = ('tid',
-                 'pid',
-                 'title',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
-                 'has_audio',
-                 'has_video',
-                 'reply_num')
+    __slots__ = ('_tid','_pid',
+                 'text',
+                 'user')
 
 
     def __init__(self):
-        pass
+        self._tid = 0
+        self._pid = 0
+        self.text = ''
+        self.user = UserInfo()
+
+
+    @property
+    def tid(self):
+        return self._tid
+
+    @tid.setter
+    def tid(self,new_tid):
+        self._tid = int(new_tid)
+
+
+    @property
+    def pid(self):
+        return self._pid
+
+    @pid.setter
+    def pid(self,new_pid):
+        self._pid = int(new_pid)
 
 
 
-class App_Thread(Web_Thread):
+class Web_Thread(BaseContent):
     """
     主题帖信息
 
+    text: 标题文本
     tid: 帖子编号
     pid: 回复编号
-    title: 标题
-    text: 首楼内容
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
-    gender: 性别
+    reply_num: 回复数
     has_audio: 是否含有音频
     has_video: 是否含有视频
+    user: UserInfo类 发布者信息
+    """
+
+
+    __slots__ = ('_reply_num',
+                 'has_audio','has_video')
+
+
+    def __init__(self):
+        super(Web_Thread,self).__init__()
+        self._reply_num = 0
+        self.has_audio = False
+        self.has_video = False
+
+
+    @property
+    def reply_num(self):
+        return self._reply_num
+
+    @reply_num.setter
+    def reply_num(self,new_reply_num):
+        self._reply_num = int(new_reply_num)
+
+
+class Thread(Web_Thread):
+    """
+    主题帖信息
+
+    text: 标题文本
+    tid: 帖子编号
+    pid: 回复编号
+    first_floor: 首楼内容
     reply_num: 回复数
+    has_audio: 是否含有音频
+    has_video: 是否含有视频
     like: 点赞数
     dislike: 点踩数
-    create_time: 10位时间戳，创建时间
-    last_time: 10位时间戳，最后回复时间
+    create_time: 10位时间戳 创建时间
+    last_time: 10位时间戳 最后回复时间
+    user: UserInfo类 发布者信息
     """
 
 
-    __slots__ = ('text',
-                 'gender',
-                 'like',
-                 'dislike',
-                 'create_time',
-                 'last_time')
+    __slots__ = ('first_floor',
+                 '_like','_dislike',
+                 '_create_time','_last_time')
 
 
     def __init__(self):
-        super(App_Thread,self).__init__()
-        pass
+        super(Thread,self).__init__()
+        self.first_floor = ''
+        self._like = 0
+        self._dislike = 0
+        self._create_time = 0
+        self._last_time = 0
 
 
-    def _init_userinfo(self,user:_User):
-        """
-        利用_User实例初始化自身属性
-        _init_userinfo(user:_User)
-        """
+    @property
+    def like(self):
+        return self._like
 
-        self.user_name = user.user_name
-        self.nick_name = user.nick_name
-        self.portrait = user.portrait
-        self.gender = user.gender
+    @like.setter
+    def like(self,new_like):
+        self._like = int(new_like)
+
+
+    @property
+    def dislike(self):
+        return self._dislike
+
+    @dislike.setter
+    def dislike(self,new_dislike):
+        self._dislike = int(new_dislike)
+
+
+    @property
+    def create_time(self):
+        return self._create_time
+
+    @create_time.setter
+    def create_time(self,new_create_time):
+        self._create_time = int(new_create_time)
+
+
+    @property
+    def last_time(self):
+        return self._last_time
+
+    @last_time.setter
+    def last_time(self,new_last_time):
+        self._last_time = int(new_last_time)
+
 
 
     def _init_content(self,content_fragments:list):
@@ -179,87 +255,135 @@ class App_Thread(Web_Thread):
         for fragment in content_fragments:
             if fragment['type'] in ['0','1','4','18']:
                 texts.append(fragment['text'])
-        self.text = ''.join(texts)
+        self.first_floor = ''.join(texts)
 
 
 
-class Web_Post(object):
+class Web_Post(BaseContent):
     """
     楼层信息
 
     text: 正文
     tid: 帖子编号
     pid: 回复编号
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
-    level: 用户等级
-    floor: 楼层数
-    is_thread_owner: 是否楼主
-    has_audio: 是否含有音频
     reply_num: 楼中楼回复数
+    floor: 楼层数
+    has_audio: 是否含有音频
     create_time: 10位时间戳，创建时间
     sign: 签名图片
     imgs: 图片列表
     smileys: 表情列表
+    user: UserInfo类 发布者信息
+    level: 用户等级
+    is_thread_owner: 是否楼主
     """
 
 
-    __slots__ = ('text',
-                 'tid',
-                 'pid',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
-                 'level',
-                 'floor',
-                 'is_thread_owner',
+    __slots__ = ('_reply_num',
+                 '_floor',
                  'has_audio',
-                 'reply_num',
-                 'create_time',
-                 'sign',
-                 'imgs',
-                 'smileys')
+                 '_create_time',
+                 'sign','imgs','smileys',
+                 '_level','is_thread_owner')
 
 
     def __init__(self):
-        pass
+        super(Web_Post,self).__init__()
+        self._reply_num = 0
+        self._floor = 0
+        self.has_audio = False
+        self._create_time = 0
+        self.sign = ''
+        self.imgs = []
+        self.smileys = []
+        self._level = 0
+        self.is_thread_owner = False
 
 
+    @property
+    def reply_num(self):
+        return self._reply_num
 
-class App_Post(Web_Post):
+    @reply_num.setter
+    def reply_num(self,new_reply_num):
+        self._reply_num = int(new_reply_num)
+
+
+    @property
+    def floor(self):
+        return self._floor
+
+    @floor.setter
+    def floor(self,new_floor):
+        self._floor = int(new_floor)
+
+
+    @property
+    def create_time(self):
+        return self._create_time
+
+    @create_time.setter
+    def create_time(self,new_create_time):
+        self._create_time = int(new_create_time)
+
+
+    @property
+    def level(self):
+        return self._level
+
+    @level.setter
+    def level(self,new_level):
+        self._level = int(new_level)
+
+
+class Post(Web_Post):
     """
     楼层信息
 
     text: 正文
     tid: 帖子编号
     pid: 回复编号
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
-    level: 用户等级
-    gender: 性别
-    floor: 楼层数
-    has_audio: 是否含有音频
-    is_thread_owner: 是否楼主
     reply_num: 楼中楼回复数
-    create_time: 10位时间戳，创建时间
     like: 点赞数
     dislike: 点踩数
-    sign: 小尾巴文本
+    floor: 楼层数
+    has_audio: 是否含有音频
+    create_time: 10位时间戳，创建时间
+    sign: 签名图片
     imgs: 图片列表
     smileys: 表情列表
+    user: UserInfo类 发布者信息
+    level: 用户等级
+    is_thread_owner: 是否楼主
     """
 
 
-    __slots__ = ('gender',
-                 'like',
-                 'dislike')
+    __slots__ = ('_like',
+                 '_dislike')
 
 
     def __init__(self):
-        super(App_Post,self).__init__()
-        pass
+        super(Post,self).__init__()
+        self._like = 0
+        self._dislike = 0
+
+
+    @property
+    def like(self):
+        return self._like
+
+    @like.setter
+    def like(self,new_like):
+        self._like = int(new_like)
+
+
+    @property
+    def dislike(self):
+        return self._dislike
+
+    @dislike.setter
+    def dislike(self,new_dislike):
+        self._dislike = int(new_dislike)
 
 
     def _init_content(self,content_fragments:list):
@@ -284,81 +408,92 @@ class App_Post(Web_Post):
         self.text = ''.join(texts)
 
 
-    def _init_userinfo(self,user:_User):
-        """
-        利用_User实例初始化自身属性
-        _init_userinfo(user:_User)
-        """
-
-        self.user_name = user.user_name
-        self.nick_name = user.nick_name
-        self.portrait = user.portrait
-        self.level = user.level
-        self.gender = user.gender
-
-
-
-class Web_Comment(object):
+class Web_Comment(BaseContent):
     """
     楼中楼信息
 
     text: 正文
     tid: 帖子编号
     pid: 回复编号
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
     has_audio: 是否含有音频
     create_time: 10位时间戳，创建时间
     smileys: 表情列表
+    user: UserInfo类 发布者信息
     """
 
 
-    __slots__ = ('text',
-                 'tid',
-                 'pid',
-                 'user_name',
-                 'nick_name',
-                 'portrait',
-                 'has_audio',
-                 'create_time',
+    __slots__ = ('has_audio',
+                 '_create_time',
                  'smileys')
 
 
     def __init__(self):
-        pass
+        super(Web_Comment,self).__init__()
+        self.has_audio = False
+        self._create_time = 0
+        self.smileys = []
 
 
+    @property
+    def create_time(self):
+        return self._create_time
 
-class App_Comment(Web_Comment):
+    @create_time.setter
+    def create_time(self,new_create_time):
+        self._create_time = int(new_create_time)
+
+
+class Comment(Web_Comment):
     """
     楼中楼信息
 
     text: 正文
     tid: 帖子编号
     pid: 回复编号
-    user_name: 发帖用户名
-    nick_name: 发帖人昵称
-    portrait: 用户头像portrait值
-    level: 用户等级
-    has_audio: 是否含有音频
-    create_time: 10位时间戳，创建时间
-    gender: 性别
     like: 点赞数
     dislike: 点踩数
+    has_audio: 是否含有音频
+    create_time: 10位时间戳，创建时间
     smileys: 表情列表
+    user: UserInfo类 发布者信息
+    level: 用户等级
     """
 
 
-    __slots__ = ('level',
-                 'gender',
-                 'like',
-                 'dislike')
+    __slots__ = ('_like','_dislike',
+                 '_level')
 
 
     def __init__(self):
-        super(App_Comment,self).__init__()
+        super(Comment,self).__init__()
         pass
+
+
+    @property
+    def like(self):
+        return self._like
+
+    @like.setter
+    def like(self,new_like):
+        self._like = int(new_like)
+
+
+    @property
+    def dislike(self):
+        return self._dislike
+
+    @dislike.setter
+    def dislike(self,new_dislike):
+        self._dislike = int(new_dislike)
+
+
+    @property
+    def level(self):
+        return self._level
+
+    @level.setter
+    def level(self,new_level):
+        self._level = int(new_level)
 
 
     def _init_content(self,content_fragments:list):
@@ -380,19 +515,6 @@ class App_Comment(Web_Comment):
         self.text = ''.join(texts)
 
 
-    def _init_userinfo(self,user:_User):
-        """
-        利用_User实例初始化自身属性
-        _init_userinfo(user:_User)
-        """
-
-        self.user_name = user.user_name
-        self.nick_name = user.nick_name
-        self.portrait = user.portrait
-        self.level = user.level
-        self.gender = user.gender
-
-
 
 class _Headers(object):
     """
@@ -409,8 +531,8 @@ class _Headers(object):
         self.app_headers = {'Content-Type':'multipart/form-data',
                            'x_bd_data_type':'protobuf',
                            'Charset':'UTF-8',
-                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVB11.7.8.0W',
-                           'User-Agent':'bdtb for Android 11.7.8.0',
+                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVB11.8.8.7W',
+                           'User-Agent':'bdtb for Android 11.8.8.7',
                            'Connection':'Keep-Alive',
                            'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
                            'Accept-Encoding':'gzip',
@@ -439,9 +561,10 @@ class _Headers(object):
                         continue
                     else:
                         text = text.replace('\n','').split(':',1)
-                        self.headers[text[0].strip()] = text[1].strip()
-        except(FileExistsError):
-            raise(FileExistsError('headers.txt not exist! Please create it from browser!'))
+                        self.headers[text[0].strip().capitalize()] = text[1].strip()
+        except (FileExistsError):
+            log.critical("headers.txt not exist! Please create it from browser!")
+            raise(FileExistsError("headers.txt not exist! Please create it from browser!"))
 
         if self.headers.__contains__('Referer'):
             del self.headers['Referer']
@@ -450,7 +573,8 @@ class _Headers(object):
                 text = text.strip().split('=')
                 self.cookies[text[0]] = text[1]
         else:
-            raise(AttributeError('raw_headers["cookies"] not found!'))
+            log.critical("raw_headers[\"cookies\"] not found!")
+            raise(AttributeError("raw_headers[\"cookies\"] not found!"))
 
 
     def _set_host(self,url):
@@ -511,7 +635,6 @@ class Browser(object):
 
 
     __slots__ = ('start_time',
-                 'log',
                  'fid_cache_filepath',
                  'fid_dict',
                  'account',
@@ -525,41 +648,17 @@ class Browser(object):
 
         self.start_time = time.time()
 
-        if not os.path.exists(PATH + '/log'):
-            os.mkdir(PATH + '/log')
+        log_dir = os.path.join(PATH,'log')
+        if not os.path.exists(log_dir):
+            os.mkdir(log_dir)
         recent_time = time.strftime('%Y-%m-%d',time.localtime(time.time()))
 
-        log_filepath = ''.join([PATH,'/log/',SHOTNAME.upper(),'_',recent_time,'.log'])
-        try:
-            file_handler = logging.FileHandler(log_filepath,encoding='utf-8')
-        except(PermissionError):
-            try:
-                os.remove(log_filepath)
-            except(OSError):
-                raise(OSError('''Can't write and remove {path}'''.format(path=log_filepath)))
-            else:
-                file_handler = logging.FileHandler(log_filepath,encoding='utf-8')
-
-        stream_handler = logging.StreamHandler(sys.stdout)
-
-        file_handler.setLevel(logging.INFO)
-        stream_handler.setLevel(logging.DEBUG)
-
-        formatter = logging.Formatter("<%(asctime)s> [%(levelname)s] %(message)s","%Y-%m-%d %H:%M:%S")
-        file_handler.setFormatter(formatter)
-        stream_handler.setFormatter(formatter)
-
-        self.log = logging.getLogger(__name__)
-        self.log.addHandler(file_handler)
-        self.log.addHandler(stream_handler)
-        self.log.setLevel(logging.DEBUG)
-
-        self.fid_cache_filepath = PATH + '/cache/fid_cache.pk'
+        self.fid_cache_filepath = os.path.join(PATH,'cache/fid_cache.pk')
         try:
             with open(self.fid_cache_filepath,'rb') as pickle_file:
                 self.fid_dict = pickle.load(pickle_file)
-        except(FileNotFoundError,EOFError):
-            self.log.warning('"{filepath}" not found. Create new fid_dict'.format(filepath=self.fid_cache_filepath))
+        except IOError:
+            log.warning('"{filepath}" not found. Create new fid_dict'.format(filepath=self.fid_cache_filepath))
             self.fid_dict = {}
 
         self.account = _Headers(headers_filepath)
@@ -575,9 +674,9 @@ class Browser(object):
             with open(self.fid_cache_filepath,'wb') as pickle_file:
                 pickle.dump(self.fid_dict,pickle_file)
         except AttributeError:
-            self.log.warning("Failed to save fid cache!")
+            log.warning("Failed to save fid cache!")
 
-        self.log.debug('Time cost:{t:.3f}'.format(t=time.time() - self.start_time))
+        log.debug('Time cost:{t:.3f}'.format(t=time.time() - self.start_time))
 
 
     @staticmethod
@@ -628,7 +727,7 @@ class Browser(object):
                 res = req.get(self.api.panel_api,
                               params=params,
                               headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -642,7 +741,7 @@ class Browser(object):
             else:
                 return True
         else:
-            self.log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
+            log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
             return None
 
 
@@ -654,7 +753,7 @@ class Browser(object):
             try:
                 res = req.get(self.api.self_info_api,
                               headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -666,7 +765,7 @@ class Browser(object):
             time.sleep(0.25)
 
         if not portrait:
-            self.log.error("Failed to get self info")
+            log.error("Failed to get self info")
             return None
 
         return self._is_vip(portrait)
@@ -676,7 +775,7 @@ class Browser(object):
         if self.account._set_host(url):
             return True
         else:
-            self.log.warning('Wrong type of url "{url}"!'.format(url=url))
+            log.warning('Wrong type of url "{url}"!'.format(url=url))
             return False
 
 
@@ -687,7 +786,7 @@ class Browser(object):
             try:
                 res = req.get(self.api.tbs_api,
                               headers = self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -698,11 +797,11 @@ class Browser(object):
             retry_times-=1
             time.sleep(0.25)
 
-        self.log.error("Failed to get tbs")
+        log.error("Failed to get tbs")
         return ''
 
 
-    def _get_fid(self,tb_name:str):
+    def _tbname2fid(self,tb_name:str):
         if self.fid_dict.__contains__(tb_name):
             return self.fid_dict[tb_name]
         else:
@@ -713,7 +812,7 @@ class Browser(object):
                     res = req.get(self.api.fid_api,
                                   params={'kw':tb_name,'ie':'utf-8'},
                                   headers = self.account.headers)
-                except(req.exceptions.RequestException):
+                except req.exceptions.RequestException:
                     pass
                 else:
                     if res.status_code == 200:
@@ -725,30 +824,12 @@ class Browser(object):
                 retry_times-=1
                 time.sleep(0.5)
 
-        self.log.critical("Failed to get fid of {name}".format(name=tb_name))
+        log.critical("Failed to get fid of {name}".format(name=tb_name))
         raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
 
 
-    def _get_portrait(self,name:str):
+    def _name2portrait(self,name:str):
         name = str(name)
-        if not self._is_nick_name(name):
-            self._set_host(self.api.user_json_api)
-            retry_times = 2
-            while retry_times:
-                try:
-                    res = req.get(self.api.user_homepage_url,
-                                  params={'un':name},
-                                  headers=self.account.headers)
-                except(req.exceptions.RequestException):
-                    pass
-                else:
-                    if res.status_code == 200:
-                        raw = re.search('"portrait":"([\w.-]+)', res.text)
-                        if raw:
-                            portrait = raw.group(1)
-                            return portrait
-                retry_times-=1
-
         self._set_host(self.api.panel_api)
         retry_times = 2
         while retry_times:
@@ -756,7 +837,7 @@ class Browser(object):
                 res = req.get(self.api.panel_api,
                               params={'un':name},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -766,29 +847,11 @@ class Browser(object):
                         return portrait
             retry_times-=1
 
-        self.log.error("Failed to get portrait of {name}".format(name=name))
+        log.error("Failed to get portrait of {name}".format(name=name))
         return ''
 
 
-    def _get_user_id(self,name:str):
-        if not self._is_nick_name(name):
-            self._set_host(self.api.user_json_api)
-            retry_times = 2
-            while retry_times:
-                try:
-                    res = req.get(self.api.user_homepage_url,
-                                  params={'un':name},
-                                  headers=self.account.headers)
-                except(req.exceptions.RequestException):
-                    pass
-                else:
-                    if res.status_code == 200:
-                        raw = re.search('"id":(\d+)', res.text)
-                        if raw:
-                            user_id = int(raw.group(1))
-                            return user_id
-                retry_times-=1
-
+    def _name2userid(self,name:str):
         self._set_host(self.api.panel_api)
         retry_times = 2
         while retry_times:
@@ -796,7 +859,7 @@ class Browser(object):
                 res = req.get(self.api.panel_api,
                               params={'un':name},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -806,11 +869,11 @@ class Browser(object):
                         return user_id
             retry_times-=1
 
-        self.log.error("Failed to get user_id of {name}".format(name=name))
+        log.error("Failed to get user_id of {name}".format(name=name))
         return 0
 
 
-    def _get_name(self,portrait:str):
+    def _portrait2names(self,portrait:str):
         """
         用portrait获取user_name和nick_name
 
@@ -821,7 +884,7 @@ class Browser(object):
         """
 
         if not portrait.startswith('tb.'):
-            self.log.error("Wrong portrait format {portrait}".format(portrait=portrait))
+            log.error("Wrong portrait format {portrait}".format(portrait=portrait))
             return ('','')
 
         self._set_host(self.api.panel_api)
@@ -832,7 +895,7 @@ class Browser(object):
                 res = req.get(self.api.panel_api,
                               params={'id':portrait},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -842,7 +905,7 @@ class Browser(object):
             retry_times-=1
 
         if not raw or not raw['error'] == '成功':
-            self.log.error("Failed to get user_id of {name}".format(name=name))
+            log.error("Failed to get user_id of {name}".format(name=name))
             return ('','')
 
         user_name = raw['data']['name']
@@ -850,7 +913,7 @@ class Browser(object):
         return (user_name,nick_name)
 
 
-    def _web_get_threads(self,tb_name,pn=0):
+    def _web_get_threads(self,tb_name,pn = 0):
         """
         获取首页帖子
         _web_get_threads(tb_name,pn=0)
@@ -868,7 +931,7 @@ class Browser(object):
                 res = req.get(self.api.tieba_url,
                               params={'kw':tb_name,'pn':pn * 50,'ie':'utf-8'},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -878,22 +941,27 @@ class Browser(object):
             retry_times-=1
 
         if not raws:
-            self.log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
+            log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
             return threads
 
         for raw in raws:
             try:
                 thread = Web_Thread()
-                thread.tid = int(re.search('href="/p/(\d*)', raw).group(1))
+                thread.tid = re.search('href="/p/(\d*)', raw).group(1)
                 thread.pid = re.search('"first_post_id":(.*?),', raw).group(1)
-                thread.title = html.unescape(re.search('href="/p/.*?" title="([\s\S]*?)"', raw).group(1))
-                thread.reply_num = int(re.search('"reply_num":(.*?),',raw).group(1))
-                thread.user_name = re.search('''frs-author-name-wrap"><a rel="noreferrer"  data-field='{"un":"(.*?)",''',raw).group(1).encode('utf-8').decode('unicode_escape')
-                thread.nick_name = re.search('title="主题作者: (.*?)"', raw).group(1)
-                thread.portrait = re.search('id":"(.*?)"}',raw).group(1)
-                thread.has_audio = True if re.search('data-thread-type="11"',raw) else False
-                thread.has_video = True if re.search('data-thread-type="40"',raw) else False
-            except(AttributeError):
+                thread.text = html.unescape(re.search('href="/p/.*?" title="([\s\S]*?)"', raw).group(1))
+                thread.reply_num = re.search('"reply_num":(.*?),',raw).group(1)
+
+                if re.search('data-thread-type="11"',raw):
+                    thread.has_audio = True
+                if re.search('data-thread-type="40"',raw):
+                    thread.has_video = True
+
+                thread.user.user_name = re.search('''frs-author-name-wrap"><a rel="noreferrer"  data-field='{"un":"(.*?)",''',raw).group(1).encode('utf-8').decode('unicode_escape')
+                thread.user.nick_name = re.search('title="主题作者: (.*?)"', raw).group(1)
+                thread.user.portrait = re.search('id":"(.*?)"}',raw).group(1)
+
+            except AttributeError:
                 continue
             else:
                 threads.append(thread)
@@ -901,7 +969,7 @@ class Browser(object):
         return threads
 
 
-    def _web_get_posts(self,tid,pn=1):
+    def _web_get_posts(self,tid,pn = 1):
         """
         获取帖子回复
         _web_get_posts(tid,pn=1)
@@ -920,7 +988,7 @@ class Browser(object):
                 res = req.get(self.api.tieba_post_url + str(tid),
                               params={'pn':pn},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -931,7 +999,7 @@ class Browser(object):
             retry_times-=1
 
         if not raw:
-            self.log.error("Failed to get posts of {tid}".format(tid=tid))
+            log.error("Failed to get posts of {tid}".format(tid=tid))
             return False,[]
 
         has_next = True if re.search('<a href=".*">尾页</a>',raw) else False
@@ -949,8 +1017,6 @@ class Browser(object):
                 user_sign = post_raw.find(class_='j_user_sign')
                 if user_sign:
                     post.sign = user_sign["src"]
-                else:
-                    post.sign = None
 
                 imgs_raw = text_raw.find_all("img",class_='BDE_Image')
                 post.imgs = [i["src"] for i in imgs_raw]
@@ -958,33 +1024,35 @@ class Browser(object):
                 smileys_raw = text_raw.find_all('img',class_='BDE_Smiley')
                 post.smileys = [re.search('/(.+?)\.(png|gif|jp.?g)',i["src"]).group() for i in smileys_raw]
 
-                post.is_thread_owner = True if post_raw.find("div",class_=re.compile('^louzhubiaoshi')) else False
-
-                post.has_audio = True if post_raw.find("div",class_=re.compile('^voice_player')) else False
+                if post_raw.find("div",class_=re.compile('^louzhubiaoshi')):
+                    post.is_thread_owner = True
+                if post_raw.find("div",class_=re.compile('^voice_player')):
+                    post.has_audio = True
 
                 time_raw = post_raw.find("span",class_='tail-info',text=re.compile('\d{4}-\d{2}-\d{2} \d{2}:\d{2}'))
                 time_array = time.strptime(time_raw.string, "%Y-%m-%d %H:%M")
-                post.create_time = int(time.mktime(time_array))
+                post.create_time = time.mktime(time_array)
 
                 author_info = json.loads(post_raw["data-field"])
                 post.pid = author_info["content"]["post_id"]
-                post.user_name = author_info["author"]["user_name"]
-                post.nick_name = author_info["author"]["user_nickname"]
-                post.portrait = re.search('[^?]*',author_info["author"]["portrait"]).group()
-                post.level = int(post_raw.find('div',attrs={'class':'d_badge_lv'}).text)
-                post.floor = int(author_info["content"]["post_no"])
-                post.reply_num = int(author_info["content"]["comment_num"])
+                post.reply_num = author_info["content"]["comment_num"]
+                post.floor = author_info["content"]["post_no"]
+
+                post.user.user_name = author_info["author"]["user_name"]
+                post.user.nick_name = author_info["author"]["user_nickname"]
+                post.user.portrait = re.search('[^?]*',author_info["author"]["portrait"]).group()
+                post.level = post_raw.find('div',attrs={'class':'d_badge_lv'}).text
 
                 post_list.append(post)
 
         except KeyError:
-            self.log.error("KeyError: Failed to get posts of {tid}".format(tid=tid))
+            log.error("KeyError: Failed to get posts of {tid}".format(tid=tid))
             return False,[]
         else:
             return has_next,post_list
 
 
-    def _web_get_comments(self,tid,pid,pn=1):
+    def _web_get_comments(self,tid,pid,pn = 1):
         """
         获取楼中楼回复
         _web_get_comments(tid,pid,pn=1)
@@ -1001,7 +1069,7 @@ class Browser(object):
                 res = req.get(self.api.comment_url,
                               params={'tid':tid,'pid':pid,'pn':pn},
                               headers=self.account.headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
@@ -1010,7 +1078,7 @@ class Browser(object):
             retry_times-=1
 
         if not raw:
-            self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
+            log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
             return False,[]
 
         content = BeautifulSoup(res.text,'lxml')
@@ -1024,22 +1092,21 @@ class Browser(object):
                 comment_data = json.loads(comment_raw['data-field'])
                 comment.tid = tid
                 comment.pid = comment_data['spid']
-                comment.portrait = comment_data['portrait']
-                comment.user_name = comment_data['user_name']
+                comment.user.portrait = comment_data['portrait']
+                comment.user.user_name = comment_data['user_name']
                 nick_name = comment_raw.find('a',class_='at j_user_card').text
-                if nick_name == comment.user_name:
-                    comment.nick_name = ''
-                else:
-                    comment.nick_name = nick_name
+                if nick_name != comment.user.user_name:
+                    comment.user.nick_name = nick_name
 
                 text_raw = comment_raw.find('span',class_='lzl_content_main')
                 comment.text = text_raw.text.strip()
 
-                comment.has_audio = True if comment_raw.find("div",class_=re.compile('^voice_player')) else False
+                if comment_raw.find("div",class_=re.compile('^voice_player')):
+                    comment.has_audio = True
 
                 time_raw = comment_raw.find('span',class_='lzl_time')
                 time_array = time.strptime(time_raw.string, "%Y-%m-%d %H:%M")
-                comment.create_time = int(time.mktime(time_array))
+                comment.create_time = time.mktime(time_array)
 
                 smileys_raw = text_raw.find_all('img',class_='BDE_Smiley')
                 comment.smileys = [i["src"] for i in smileys_raw]
@@ -1053,7 +1120,7 @@ class Browser(object):
             return False,[]
 
 
-    def _app_get_threads(self,tb_name,pn=1,rn=30):
+    def _app_get_threads(self,tb_name,pn = 1,rn = 30):
         """
         使用客户端api获取帖子
         _app_get_threads(tb_name,pn=1,rn=30)
@@ -1063,12 +1130,12 @@ class Browser(object):
             pn: 整型 页数
             rn: 整型 每页帖子数
         返回值:
-            list(App_Thread)
+            list(Thread)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
                    '_client_type':2,
-                   '_client_version':'11.7.8.0',
+                   '_client_version':'11.8.8.7',
                    '_phone_imei':'869346037118962',
                    'from':'tieba',
                    'kw':tb_name,
@@ -1084,53 +1151,57 @@ class Browser(object):
                 res = req.post(self.api.app_thread_api,
                                data=self._app_sign(payload),
                                headers=self.account.app_headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
                     raw = res.text
                     break
             retry_times-=1
+            time.sleep(0)
 
         try:
             main_json = json.loads(raw,strict=False)
             if int(main_json['error_code']):
                 raise(ValueError('error_code is not 0'))
-        except(json.JSONDecodeError,ValueError):
-            self.log.error("Failed to get threads of {tb_name}".format(tb_name=tb_name))
+        except (json.JSONDecodeError,ValueError):
+            log.error("Failed to get threads of {tb_name}".format(tb_name=tb_name))
             return []
 
-        users = _User_Dict(main_json['user_list'])
+        users = UserInfo_Dict(main_json['user_list'])
 
         threads = []
         for thread_raw in main_json['thread_list']:
-            thread = App_Thread()
-
+            thread = Thread()
             try:
-                thread._init_userinfo(users[thread_raw['author_id']])
-            except(KeyError):
+                thread.user = users[thread_raw['author_id']][0]
+            except KeyError:
                 continue
 
             thread.tid = thread_raw['tid']
             thread.pid = thread_raw['first_post_id']
 
-            thread.title = thread_raw['title']
+            thread.text = thread_raw['title']
             thread._init_content(thread_raw.get('first_post_content',[]))
-            thread.has_audio = True if thread_raw.get('voice_info',None) else False
-            thread.has_video = True if thread_raw.get('video_info',None) else False
-            thread.like = int(thread_raw['agree_num'])
-            thread.dislike = int(thread_raw['disagree_num'])
 
-            thread.reply_num = int(thread_raw['reply_num'])
-            thread.create_time = int(thread_raw['create_time'])
-            thread.last_time = int(thread_raw['last_time_int'])
+            if thread_raw.get('voice_info',None):
+                thread.has_audio = True
+            if thread_raw.get('video_info',None):
+                thread.has_video = True
+
+            thread.like = thread_raw['agree_num']
+            thread.dislike = thread_raw['disagree_num']
+
+            thread.reply_num = thread_raw['reply_num']
+            thread.create_time = thread_raw['create_time']
+            thread.last_time = thread_raw['last_time_int']
 
             threads.append(thread)
 
         return threads
 
 
-    def _app_get_posts(self,tid,pn=1,rn=30):
+    def _app_get_posts(self,tid,pn = 1,rn = 30):
         """
         使用客户端api获取回复
         _app_get_posts(tid,pn=1,rn=30)
@@ -1141,7 +1212,7 @@ class Browser(object):
             rn: 整型 每页帖子数
         返回值:
             has_next: 是否还有下一页
-            list(App_Post)
+            list(Post)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
@@ -1161,52 +1232,52 @@ class Browser(object):
                 res = req.post(self.api.app_post_api,
                                data=self._app_sign(payload),
                                headers=self.account.app_headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
                     raw = res.text
                     break
             retry_times-=1
+            time.sleep(0)
 
         try:
             main_json = json.loads(raw,strict=False)
             if int(main_json['error_code']):
                 raise(ValueError('error_code is not 0'))
-        except(json.JSONDecodeError,ValueError):
-            self.log.error("Failed to get posts of {tid}".format(tid=tid))
+        except (json.JSONDecodeError,ValueError):
+            log.error("Failed to get posts of {tid}".format(tid=tid))
             return False,[]
 
         thread_owner_id = main_json["thread"]['author']['id']
 
-        users = _User_Dict(main_json['user_list'])
+        users = UserInfo_Dict(main_json['user_list'])
 
         posts = []
         for post_raw in main_json['post_list']:
-            post = App_Post()
+            post = Post()
 
             try:
-                post._init_userinfo(users[post_raw['author_id']])
-            except(KeyError):
+                post.user,post.level = users[post_raw['author_id']]
+            except KeyError:
                 continue
 
             post.tid = tid
             post.pid = post_raw['id']
 
             post._init_content(post_raw['content'])
-            post.like = int(post_raw['agree']['agree_num'])
-            post.dislike = int(post_raw['agree']['disagree_num'])
+            post.like = post_raw['agree']['agree_num']
+            post.dislike = post_raw['agree']['disagree_num']
 
-            post.is_thread_owner = True if post_raw['author_id'] == thread_owner_id else False
-            post.floor = int(post_raw['floor'])
-            post.reply_num = int(post_raw['sub_post_number'])
-            post.create_time = int(post_raw['time'])
+            if post_raw['author_id'] == thread_owner_id:
+                post.is_thread_owner = True
 
-            sign_text = ''
+            post.floor = post_raw['floor']
+            post.reply_num = post_raw['sub_post_number']
+            post.create_time = post_raw['time']
+
             if post_raw['signature']:
                 post.sign = ''.join([sign['text'] for sign in post_raw['signature']['content'] if sign['type'] == '0'])
-            else:
-                post.sign = None
 
             posts.append(post)
 
@@ -1215,7 +1286,7 @@ class Browser(object):
         return has_next,posts
 
 
-    def _app_get_comments(self,tid,pid,pn=1):
+    def _app_get_comments(self,tid,pid,pn = 1):
         """
         使用客户端api获取回复
         _app_get_comments(tid,pid,pn=1)
@@ -1226,12 +1297,12 @@ class Browser(object):
             pn: 整型 页数
         返回值:
             has_next: 是否还有下一页
-            list(App_Comment)
+            list(Comment)
         """
 
         payload = {'_client_id':'wappc_1595296730520_220',
                    '_client_type':'2',
-                   '_client_version':'11.7.8.0',
+                   '_client_version':'11.8.8.7',
                    '_phone_imei':'869346037118962',
                    'from':'tieba',
                    'kz':tid,
@@ -1245,13 +1316,14 @@ class Browser(object):
                 res = req.post(self.api.app_comment_api,
                                data=self._app_sign(payload),
                                headers=self.account.app_headers)
-            except(req.exceptions.RequestException):
+            except req.exceptions.RequestException:
                 pass
             else:
                 if res.status_code == 200:
                     raw = res.text
                     break
             retry_times-=1
+            time.sleep(0)
 
         if not raw:
             return False,[]
@@ -1262,26 +1334,27 @@ class Browser(object):
             main_json = json.loads(raw,strict=False)
             if int(main_json['error_code']):
                 raise(ValueError('error_code is not 0'))
-        except(json.JSONDecodeError,ValueError):
-            self.log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
+        except (json.JSONDecodeError,ValueError):
+            log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
             return False,[]
 
         comments = []
         for comment_raw in main_json['subpost_list']:
-            comment = App_Comment()
-            comment.tid = int(tid)
+            comment = Comment()
+            comment.tid = tid
             comment.pid = comment_raw['id']
 
             comment._init_content(comment_raw['content'])
-            comment.like = int(comment_raw['agree']['agree_num'])
-            comment.dislike = int(comment_raw['agree']['disagree_num'])
+            comment.like = comment_raw['agree']['agree_num']
+            comment.dislike = comment_raw['agree']['disagree_num']
 
             author_info = comment_raw['author']
-            comment.user_name = author_info['name']
-            comment.nick_name = author_info['name_show'] if author_info['name_show'] != author_info['name'] else None
-            comment.portrait = re.search('[\w.-]+',author_info['portrait']).group()
+            comment.user.user_name = author_info['name']
+            comment.user.nick_name = author_info['name_show'] if author_info['name_show'] != author_info['name'] else None
+            comment.user.portrait = re.match('[\w.-]+',author_info['portrait']).group()
+            if author_info['gender']:
+                comment.user.gender = author_info['gender']
             comment.level = int(author_info['level_id'])
-            comment.gender = int(author_info['gender']) if author_info['gender'] else 2
 
             comment.create_time = int(comment_raw['time'])
 
