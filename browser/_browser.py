@@ -1,14 +1,9 @@
 ﻿# -*- coding:utf-8 -*-
-__all__ = ('UserInfo',
-           'Browser',
-           'Web_Thread',
-           'Web_Post',
-           'Web_Comment',
-           'Thread',
-           'Post',
-           'Comment',
-           'SHOTNAME',
-           'log')
+__all__ = ('Browser','log',
+           'UserInfo',
+           'Web_Thread','Web_Post','Web_Comment',
+           'Thread','Post','Comment',
+           'SHOTNAME')
 
 
 
@@ -21,7 +16,6 @@ from functools import wraps
 import hashlib
 
 import requests as req
-from urllib.parse import quote,unquote
 
 import re
 import json
@@ -29,9 +23,7 @@ import html
 import pickle
 from bs4 import BeautifulSoup
 
-from ._logger import MyLogger,SHOTNAME
-
-log = MyLogger(__name__)
+from ._logger import log,SHOTNAME
 
 
 
@@ -70,7 +62,7 @@ class UserInfo_Dict(dict):
     UserInfo_Dict(user_list:list)
 
     参数:
-        user_list: 列表 必须是从app接口获取的用户信息列表！
+        user_list: list 必须是从app接口获取的用户信息列表！
     """
 
 
@@ -522,24 +514,33 @@ class _Headers(object):
     """
 
 
-    __slots__ = ('headers','cookies','app_headers')
+    __slots__ = ('headers','cookies','app_headers','app_cookies')
 
 
     def __init__(self,filepath):
         self.update(filepath)
 
-        self.app_headers = {'Content-Type':'multipart/form-data',
-                           'x_bd_data_type':'protobuf',
+        self.app_headers = {'Content-Type':'application/x-www-form-urlencoded',
                            'Charset':'UTF-8',
-                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVB11.8.8.7W',
                            'User-Agent':'bdtb for Android 11.8.8.7',
                            'Connection':'Keep-Alive',
-                           'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
-                           'Accept-Encoding':'gzip',
+                           'client_logid':'1600505010776',
+                           'client_user_token':'957339815',
                            'cuid':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
+                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
+                           'cuid_gid':'',
+                           'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
                            'client_type':'2',
+                           'Accept-Encoding':'gzip',
                            'Host':'c.tieba.baidu.com',
                            }
+
+        self.app_cookies = {'TBBRAND':'TAS-AN00',
+                            'BAIDUCUID':'gu2wu_aIB8guivtqg8-Y8_iXHuYduS8Kg8H0fl8Ovf8j9HMJJk1yRhEmA',
+                            'CUID':self.app_headers['cuid'],
+                            'ka':'open',
+                            'BAIDUZID':'000'
+                            }
 
 
     def update(self,filepath:str):
@@ -670,6 +671,7 @@ class Browser(object):
         """
         自动缓存fid信息
         """
+
         try:
             with open(self.fid_cache_filepath,'wb') as pickle_file:
                 pickle.dump(self.fid_dict,pickle_file)
@@ -681,16 +683,20 @@ class Browser(object):
 
     @staticmethod
     def timestamp2str(timestamp):
+        """
+        时间戳转格式化字符串
+        timestamp2str(timestamp)
+
+        参数:
+            timestamp: int 时间戳
+
+        返回值:
+            timestr: str 格式化字符串
+        """
         timestamp = int(timestamp)
         time_local = time.localtime(timestamp)
-        _str = time.strftime("%Y-%m-%d %H:%M:%S",time_local)
-        return _str
-
-
-    @staticmethod
-    def _is_nick_name(name:str):
-        name = str(name)
-        return True if re.search('[^\u4e00-\u9fa5\w·]',name) else False
+        timestr = time.strftime("%Y-%m-%d %H:%M:%S",time_local)
+        return timestr
 
 
     @staticmethod
@@ -714,7 +720,18 @@ class Browser(object):
         return data
 
 
-    def _is_vip(self,keyword:str):
+    def _is_vip(self,keyword):
+        """
+        判断指定用户的vip状态
+        _is_vip(keyword)
+
+        参数:
+            keyword: str 用户的user_name或portrait
+
+        返回值:
+            is_vip: bool 是否vip
+        """
+
         if keyword.startswith('tb.'):
             params = {'id':keyword}
         else:
@@ -726,7 +743,7 @@ class Browser(object):
             try:
                 res = req.get(self.api.panel_api,
                               params=params,
-                              headers = self.account.headers)
+                              headers=self.account.headers)
             except req.exceptions.RequestException:
                 pass
             else:
@@ -746,13 +763,21 @@ class Browser(object):
 
 
     def _is_self_vip(self):
+        """
+        当前加载的account是否vip
+        _is_self_vip()
+
+        返回值:
+            is_vip: bool 当前账号是否vip
+        """
+
         self._set_host(self.api.self_info_api)
         portrait = None
-        retry_times = 2
+        retry_times = 3
         while retry_times:
             try:
                 res = req.get(self.api.self_info_api,
-                              headers = self.account.headers)
+                              headers=self.account.headers)
             except req.exceptions.RequestException:
                 pass
             else:
@@ -771,7 +796,15 @@ class Browser(object):
         return self._is_vip(portrait)
 
 
-    def _set_host(self,url:str):
+    def _set_host(self,url):
+        """
+        设置消息头的host字段
+        _set_host(url)
+
+        参数:
+            url: str 待请求的地址
+        """
+
         if self.account._set_host(url):
             return True
         else:
@@ -780,12 +813,20 @@ class Browser(object):
 
 
     def _get_tbs(self):
+        """
+        获取贴吧反csrf校验码tbs
+        _get_tbs()
+
+        返回值:
+            tbs: str 反csrf校验码tbs
+        """
+
         self._set_host(self.api.tbs_api)
         retry_times = 5
         while retry_times:
             try:
                 res = req.get(self.api.tbs_api,
-                              headers = self.account.headers)
+                              headers=self.account.headers)
             except req.exceptions.RequestException:
                 pass
             else:
@@ -801,7 +842,18 @@ class Browser(object):
         return ''
 
 
-    def _tbname2fid(self,tb_name:str):
+    def _tbname2fid(self,tb_name):
+        """
+        通过贴吧名获取forum_id
+        _tbname2fid(tb_name)
+
+        参数:
+            tb_name: str 贴吧名
+
+        返回值:
+            fid: int 该贴吧的forum_id
+        """
+
         if self.fid_dict.__contains__(tb_name):
             return self.fid_dict[tb_name]
         else:
@@ -811,27 +863,38 @@ class Browser(object):
                 try:
                     res = req.get(self.api.fid_api,
                                   params={'kw':tb_name,'ie':'utf-8'},
-                                  headers = self.account.headers)
+                                  headers=self.account.headers)
                 except req.exceptions.RequestException:
                     pass
                 else:
                     if res.status_code == 200:
                         raw = re.search('"forum_id":(\d+)', res.text)
                         if raw:
-                            fid = raw.group(1)
+                            fid = int(raw.group(1))
                             self.fid_dict[tb_name] = fid
                             return fid
                 retry_times-=1
-                time.sleep(0.5)
+                time.sleep(0.25)
 
         log.critical("Failed to get fid of {name}".format(name=tb_name))
         raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
 
 
-    def _name2portrait(self,name:str):
+    def _name2portrait(self,name):
+        """
+        通过用户名或昵称获取portrait
+        _name2portrait(name)
+
+        参数:
+            name: str user_name或nick_name
+
+        返回值:
+            portrait: str 该用户的portrait
+        """
+
         name = str(name)
         self._set_host(self.api.panel_api)
-        retry_times = 2
+        retry_times = 3
         while retry_times:
             try:
                 res = req.get(self.api.panel_api,
@@ -846,14 +909,26 @@ class Browser(object):
                         portrait = raw.group(1)
                         return portrait
             retry_times-=1
+            time.sleep(0)
 
         log.error("Failed to get portrait of {name}".format(name=name))
         return ''
 
 
-    def _name2userid(self,name:str):
+    def _name2userid(self,name):
+        """
+        通过用户名或昵称获取user_id
+        _name2userid(name)
+
+        参数:
+            name: str user_name或nick_name
+
+        返回值:
+            user_id: int 该用户的user_id
+        """
+
         self._set_host(self.api.panel_api)
-        retry_times = 2
+        retry_times = 3
         while retry_times:
             try:
                 res = req.get(self.api.panel_api,
@@ -868,17 +943,20 @@ class Browser(object):
                         user_id = int(raw.group(1))
                         return user_id
             retry_times-=1
+            time.sleep(0)
 
         log.error("Failed to get user_id of {name}".format(name=name))
         return 0
 
 
-    def _portrait2names(self,portrait:str):
+    def _portrait2names(self,portrait):
         """
         用portrait获取user_name和nick_name
+        _portrait2names(portrait)
 
         参数:
-            portrait: 字符串
+            portrait: str 用户的portrait
+
         返回值:
             (user_name,nick_name)
         """
@@ -903,6 +981,7 @@ class Browser(object):
                     if raw['error'] == '成功':
                         break
             retry_times-=1
+            time.sleep(0)
 
         if not raw or not raw['error'] == '成功':
             log.error("Failed to get user_id of {name}".format(name=name))
@@ -913,13 +992,17 @@ class Browser(object):
         return (user_name,nick_name)
 
 
-    def _web_get_threads(self,tb_name,pn = 0):
+    def _web_get_threads(self,tb_name,pn=0):
         """
-        获取首页帖子
+        使用网页版api获取首页帖子
         _web_get_threads(tb_name,pn=0)
 
+        参数:
+            tb_name: str 贴吧名
+            pn: int 页码（每页50帖）
+
         返回值:
-            list(Web_Thread)
+            threads: list(Web_Thread)
         """
 
         threads = []
@@ -939,6 +1022,7 @@ class Browser(object):
                     if raws:
                         break
             retry_times-=1
+            time.sleep(0)
 
         if not raws:
             log.error("Failed to get threads in {tb_name}!".format(tb_name=tb_name))
@@ -969,14 +1053,18 @@ class Browser(object):
         return threads
 
 
-    def _web_get_posts(self,tid,pn = 1):
+    def _web_get_posts(self,tid,pn=1):
         """
-        获取帖子回复
+        使用网页版api获取主题帖内回复
         _web_get_posts(tid,pn=1)
 
+        参数:
+            tid: int 主题帖tid
+            pn: int 页码
+
         返回值:
-            has_next: 是否还有下一页
-            list(Web_Post)
+            has_next: bool 是否还有下一页
+            posts: list(Web_Post)
         """
 
         self._set_host(self.api.tieba_post_url)
@@ -997,6 +1085,7 @@ class Browser(object):
                         raw = raw.group()
                         break
             retry_times-=1
+            time.sleep(0)
 
         if not raw:
             log.error("Failed to get posts of {tid}".format(tid=tid))
@@ -1052,14 +1141,19 @@ class Browser(object):
             return has_next,post_list
 
 
-    def _web_get_comments(self,tid,pid,pn = 1):
+    def _web_get_comments(self,tid,pid,pn=1):
         """
-        获取楼中楼回复
+        使用网页版api获取楼中楼回复
         _web_get_comments(tid,pid,pn=1)
 
+        参数:
+            tid: int 主题帖tid
+            pid: int 回复pid
+            pn: int 页码
+
         返回值:
-            has_next: 是否还有下一页
-            list(Web_Comment)
+            has_next: bool 是否还有下一页
+            comments: list(Web_Comment)
         """   
 
         self._set_host(self.api.comment_url)
@@ -1076,6 +1170,7 @@ class Browser(object):
                     raw = res.text
                     break
             retry_times-=1
+            time.sleep(0)
 
         if not raw:
             log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
@@ -1120,23 +1215,24 @@ class Browser(object):
             return False,[]
 
 
-    def _app_get_threads(self,tb_name,pn = 1,rn = 30):
+    def get_threads(self,tb_name,pn=1,rn=30):
         """
-        使用客户端api获取帖子
-        _app_get_threads(tb_name,pn=1,rn=30)
+        使用客户端api获取首页帖子
+        get_threads(tb_name,pn=1,rn=30)
 
         参数:
-            tb_name: 字符串 贴吧名
-            pn: 整型 页数
-            rn: 整型 每页帖子数
+            tb_name: str 贴吧名
+            pn: int 页码
+            rn: int 每页帖子数
+
         返回值:
-            list(Thread)
+            threads: list(Thread)
         """
 
-        payload = {'_client_id':'wappc_1595296730520_220',
+        payload = {'_client_id':'wappc_1600500414046_633',
                    '_client_type':2,
                    '_client_version':'11.8.8.7',
-                   '_phone_imei':'869346037118962',
+                   '_phone_imei':'000000000000000',
                    'from':'tieba',
                    'kw':tb_name,
                    'pn':pn,
@@ -1201,24 +1297,25 @@ class Browser(object):
         return threads
 
 
-    def _app_get_posts(self,tid,pn = 1,rn = 30):
+    def get_posts(self,tid,pn=1,rn=30):
         """
-        使用客户端api获取回复
-        _app_get_posts(tid,pn=1,rn=30)
+        使用客户端api获取主题帖内回复
+        get_posts(tid,pn=1,rn=30)
 
         参数:
-            tid: 整型 帖子序号
-            pn: 整型 页数
-            rn: 整型 每页帖子数
+            tid: int 主题帖tid
+            pn: int 页码
+            rn: int 每页帖子数
+
         返回值:
-            has_next: 是否还有下一页
-            list(Post)
+            has_next: bool 是否还有下一页
+            posts: list(Post)
         """
 
-        payload = {'_client_id':'wappc_1595296730520_220',
+        payload = {'_client_id':'wappc_1600500414046_633',
                    '_client_type':2,
-                   '_client_version':'11.8.6.2',
-                   '_phone_imei':'869346037118962',
+                   '_client_version':'11.8.8.7',
+                   '_phone_imei':'000000000000000',
                    'from':'tieba',
                    'kz':tid,
                    'pn':pn,
@@ -1286,24 +1383,25 @@ class Browser(object):
         return has_next,posts
 
 
-    def _app_get_comments(self,tid,pid,pn = 1):
+    def get_comments(self,tid,pid,pn=1):
         """
-        使用客户端api获取回复
-        _app_get_comments(tid,pid,pn=1)
+        使用客户端api获取楼中楼回复
+        get_comments(tid,pid,pn=1)
 
         参数:
-            tid: 整型 帖子序号
-            pid: 字符串 回复编号
-            pn: 整型 页数
+            tid: int 主题帖tid
+            pid: int 回复pid
+            pn: int 页码
+
         返回值:
-            has_next: 是否还有下一页
-            list(Comment)
+            has_next: bool 是否还有下一页
+            comments: list(Comment)
         """
 
-        payload = {'_client_id':'wappc_1595296730520_220',
+        payload = {'_client_id':'wappc_1600500414046_633',
                    '_client_type':'2',
                    '_client_version':'11.8.8.7',
-                   '_phone_imei':'869346037118962',
+                   '_phone_imei':'000000000000000',
                    'from':'tieba',
                    'kz':tid,
                    'pid':pid,

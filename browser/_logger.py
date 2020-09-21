@@ -1,6 +1,6 @@
 # -*- coding:utf-8 -*-
 __all__ = ('SCRIPT_PATH','FILENAME','SHOTNAME',
-           'MyLogger')
+           'MyLogger','log')
 
 
 
@@ -26,7 +26,7 @@ class MyLogger(logging.Logger):
     """
 
 
-    def __init__(self,name = __name__):
+    def __init__(self,name=__name__):
 
         super(MyLogger,self).__init__(__name__)
 
@@ -57,3 +57,6 @@ class MyLogger(logging.Logger):
         self.addHandler(file_handler)
         self.addHandler(stream_handler)
         self.setLevel(logging.DEBUG)
+
+
+log = MyLogger(__name__)
