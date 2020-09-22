@@ -31,16 +31,16 @@ DB_NAME = 'tieba_pid_whitelist'  # 数据库名
 system = platform.system()
 if system == 'Linux':
     mysql_login = {
-        'host':'starry-qvq.mysql.rds.aliyuncs.com',
-        'user':'starry',
-        'passwd':'40Ar40K-'
+        'host':'',
+        'user':'',
+        'passwd':''
         }  # 链接所需的用户名和密码
 else:
     mysql_login = {
-        'host':'starry-ovo.mysql.rds.aliyuncs.com',
-        'port':4396,
-        'user':'starry',
-        'passwd':'40Ar40K-'
+        'host':'',
+        'port':,
+        'user':'',
+        'passwd':''
         }
 
 
