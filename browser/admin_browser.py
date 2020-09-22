@@ -12,7 +12,8 @@ from bs4 import BeautifulSoup
 
 import requests as req
 
-from ._browser import Browser,_Basic_API,log
+from .__define__ import log
+from ._browser import Browser,_Basic_API
 
 
 

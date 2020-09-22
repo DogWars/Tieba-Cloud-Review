@@ -164,7 +164,7 @@ class CloudReview(browser.CloudReview):
         检查thread内容
         """
 
-        posts = self.get_posts(thread.tid,9999)[1]
+        posts = self.get_posts(thread.tid,9999)
         if posts and posts[0].floor == 1:
             level = posts[0].level
             flag = self.__check_text(thread,level)

@@ -22,8 +22,8 @@ import requests as req
 import mysql.connector
 from urllib.parse import unquote
 
-from .admin_browser import AdminBrowser,log
-from ._logger import SHOTNAME
+from .__define__ import log,SHOTNAME
+from .admin_browser import AdminBrowser
 
 
 
@@ -31,16 +31,16 @@ DB_NAME = 'tieba_pid_whitelist'  # 数据库名
 system = platform.system()
 if system == 'Linux':
     mysql_login = {
-        'host':'',
-        'user':'',
-        'passwd':''
+        'host':'starry-qvq.mysql.rds.aliyuncs.com',
+        'user':'starry',
+        'passwd':'40Ar40K-'
         }  # 链接所需的用户名和密码
 else:
     mysql_login = {
-        'host':'',
-        'port':,
-        'user':'',
-        'passwd':''
+        'host':'starry-ovo.mysql.rds.aliyuncs.com',
+        'port':4396,
+        'user':'starry',
+        'passwd':'40Ar40K-'
         }
 
 
@@ -289,7 +289,7 @@ class RegularExp(object):
     course_exp = re.compile('摄影|视频(剪辑|特效)|后期|CAD|素描|彩铅|板绘|绘画|设计|ps|美术|国画|水彩|领取.{0,3}课程|英语口语|演唱|声乐|唱.{0,3}技巧',re.I)
     course_check_exp = re.compile('交流群|课程|徒弟|素材|资料|教(程|学)|学习|邮箱|留言|扣.?1|想学',re.I)
 
-    app_nocheck_exp = re.compile('淘tao寳|tb口令|(淘宝|抖音).{0,2}(号|hao)|绿色.{0,2}平台|赛事预测|【支付宝】|解封微信')
+    app_nocheck_exp = re.compile('淘tao寳|tb口令|(淘宝|抖音).{0,2}(号|hao)|绿色.{0,2}平台|赛事预测|【支付宝】|解封微信|扫码.{0,3}送红包')
     app_exp = re.compile('拼(夕夕|多多|dd)|京(东|d)|抖音|支付宝|淘宝|火山小视频')
     app_check_exp = re.compile('点一下|点赞|任务|长按复制|复制整段话|账号|绿色|开店|店铺|运营|搜索')
 
@@ -299,7 +299,7 @@ class RegularExp(object):
     job_exp = re.compile('暑假工|临时工|短期工|兼职|主播|声播|模特|陪玩|写手|点赞员|工作室|手工|项目|电商|创业|自媒体|加盟|副业|代理|(免费|需要|诚信|诚心)(带|做)|想(赚|挣)钱|不甘.?现状.*兄弟|有想.*的(朋友|兄弟)|(刷|做)(单|销量)|微商|投资|写好评|不嫌少|需工作|号商|形象好|气质佳|转发朋友圈|手工活',re.I)
     job_check_exp = re.compile('招|聘|佣金|押金|会费|培训|结算|日(结|洁)|高佣|想做的|有兴趣|稳赚|(一|每)(天|日|月)\d{2,3}|(日|月)(入|进).{0,2}(元|块|百|佰|万|w)|(利润|收益|工资|薪资|收入)(高|\d{3,})|高(利润|收益|工资|薪资|收入)|低(风险|投入)|风险低|合作愉快|手机.*就(行|可)|有.?手机||包学会|包分配|工作(轻松|简单)',re.I)
     
-    game_exp = re.compile('手游.{0,7}(神豪|托|演员|充值)|招.{0,4}(托|内部|人员|内玩)|找.{0,4}内玩|新区开服|霸服|你想要玩的手游|(游戏|内部|手游)体验员|(玩家|手游|每天都有|充值)福利|喜欢玩.*仙侠|(每日|送|领).{0,2}648|手蝣|私服|(手游|游戏)推广|手游.{0,2}招|(游戏|内部|手游).*(资源|福利)号|(仙侠|国战).{0,2}(游戏|手游)|游戏.{0,2}单|(当|做)游戏主播|开了个手游|来就.{0,2}送',re.I)
+    game_exp = re.compile('手游.{0,7}(神豪|托|演员|充值)|招.{0,4}(托|内部|人员|内玩)|找.{0,4}内玩|新区开服|霸服|你想要玩的手游|(游戏|内部|手游)体验员|(玩家|手游|游戏|每天都有|充值)福利|喜欢玩.*仙侠|(每日|送|领).{0,2}648|手蝣|私服|(手游|游戏)推广|手游.{0,2}招|(游戏|内部|手游).*(资源|福利)号|(仙侠|国战).{0,2}(游戏|手游)|游戏.{0,2}单|(当|做)游戏主播|开了个手游|来就.{0,2}送',re.I)
 
     name_nocheck_exp = re.compile('魸|莆田')
     name_exp = re.compile('😍|☜|☞')
