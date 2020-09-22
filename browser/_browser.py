@@ -538,7 +538,7 @@ class Browser(object):
                 pass
             else:
                 if res.status_code == 200:
-                    raw=res.text
+                    raw = res.text
                     if raw:
                         break
             retry_times-=1
@@ -590,7 +590,7 @@ class Browser(object):
 
         self._set_host(self.api.tieba_post_url)
 
-        posts=Posts()
+        posts = Posts()
         raw = None
         retry_times = 25
         while retry_times:
