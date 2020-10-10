@@ -14,15 +14,17 @@ PATH = os.path.split(os.path.realpath(__file__))[0]
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Block Tieba ID')
+
+    parser = argparse.ArgumentParser(description='Block Tieba ID',allow_abbrev=False)
+    parser.add_argument('--BDUSS_key','-k',
+                        type=str,
+                        default='default',
+                        help='作为键值从user_control/BDUSS.json中取出BDUSS')
     parser.add_argument('--block_ctrl_filepath','-bc',
                         type=str,
                         default=PATH + '/user_control/' + browser.SHOTNAME + '.json',
-                        help='block_control.json的路径，对example.py而言默认值为./user_control/example.json')
-    parser.add_argument('--header_filepath','-hp',
-                        type=str,
-                        default=PATH + '/user_control/headers.txt',
-                        help='headers.txt（包含BDUSS的消息头）的路径，默认值为./user_control/headers.txt')
+                        help='block_control.json的路径，对example.py而言默认值为./user_control/example.json',
+                        metavar='FILEPATH')
     args = parser.parse_args()
 
     try:
@@ -33,7 +35,7 @@ if __name__ == '__main__':
     except AttributeError:
         raise(AttributeError('Incorrect format of block_control.json!'))
 
-    block_id = browser.AdminBrowser(args.header_filepath)
+    block_id = browser.AdminBrowser(args.BDUSS_key)
 
     for i,block in enumerate(block_list):
         user = browser.UserInfo()

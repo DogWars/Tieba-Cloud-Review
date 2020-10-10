@@ -1,43 +1,9 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
-"""
-JSON Example:
-{
-  "tb_name": "有米的日子",
-
-  //[tid,[tid,pid]]
-  "recover": [],
-
-  //[name,]
-  "unblock": [],
-
-  //[name,]
-  "blacklist_add": [],
-
-  //[name,]
-  "blacklist_cancel": [],
-
-  //[tid,[tid,cid=0],]
-  "good_add": [],
-
-  //[tid,]
-  "good_cancel": [],
-
-  //[tid,[tid,use_vip=true],]
-  "top_set": [],
-
-  //[tid,]
-  "top_cancel": []
-}
-"""
-
-
-
 import os
 import argparse
 
 import re
-import json
 import browser
 
 
@@ -46,154 +12,113 @@ PATH = os.path.split(os.path.realpath(__file__))[0]
 
 
 
-def _run_task(json_str):
-    """
-    运行json文件指定的任务
-    """
-
-    note = re.search('/\*.*\*/',json_str,re.S)
-    if note:
-        note = note.group()
-    else:
-        note = ''
-    json_str = json_str.replace(note,'')
-    task_control = json.loads(json_str)
-
-
-    tb_name = task_control['tb_name']
-
-
-    tid_pids = task_control.get('recover',[])
-    if tid_pids:
-        if brow.recovers(tb_name,tid_pids):
-            task_control['recover'] = []
-
-
-    unblocks = task_control.get('unblock',[])
-    if unblocks:
-        if brow.unblock_users(tb_name,unblocks):
-            task_control['unblock'] = []
-
-
-    blacklist_adds = task_control.get('blacklist_add',[])
-    temp = []
-    for name in blacklist_adds:
-        if not brow.blacklist_add(tb_name,name):
-            temp.append(name)
-    task_control['blacklist_add'] = temp
-
-
-    blacklist_cancels = task_control.get('blacklist_cancel',[])
-    if brow.blacklist_cancels(tb_name,blacklist_cancels):
-        task_control['blacklist_cancel'] = []
-
-    temp = []
-    for item in task_control.get('good_add',[]):
-        if type(item) == list:
-            if len(item) == 2:
-                if not brow.good_add(tb_name,item[0],item[1]):
-                    temp.append(item)
-            else:
-                browser.log.error('Wrong length of {item}'.format(item=item))
-        else:
-            if not brow.good_add(tb_name,item):
-                temp.append(item)
-    task_control['good_add'] = temp
-
-
-    temp = []
-    for tid in task_control.get('good_cancel',[]):
-        if not brow.good_cancel(tb_name,tid):
-            temp.append(tid)
-    task_control['good_cancel'] = temp
-
-
-    temp = []
-    for item in task_control.get('top_set',[]):
-        if type(item) == list:
-            if len(item) == 2:
-                if not brow.top_set(tb_name,item[0],item[1]):
-                    temp.append(item)
-            else:
-                browser.log.error('Wrong length of {item}'.format(item=item))
-        else:
-            if not brow.top_set(tb_name,item):
-                temp.append(item)
-    task_control['top_set'] = temp
-
-
-    temp = []
-    for tid in task_control.get('top_cancel',[]):
-        if not brow.top_cancel(tb_name,tid):
-            temp.append(tid)
-    task_control['top_cancel'] = temp
-
-    if task_control.get('refuse_appeals',False):
-        brow.refuse_appeals(tb_name)
-
-
-    json_str = json.dumps(task_control,ensure_ascii=False,indent=2,separators=(',',':'))
-    json_str = json_str + '\n' + note
-
-    return json_str
-
-
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='ADMIN OPERATION',allow_abbrev=False)
 
-    parser.add_argument('--header_filepath','-hp',
-                        type=str,
-                        default=PATH + '/user_control/headers.txt',
-                        help='headers.txt（包含BDUSS的消息头）的路径，默认值为./user_control/headers.txt')
-    parser.add_argument('--operation_ctrl_filepath','-oc',
-                        type=str,
-                        default=PATH + '/user_control/' + browser.SHOTNAME + '.json',
-                        help='operation_control.json的路径，对example.py而言默认值为./user_control/example.json')
-
-    parser.add_argument('--tieba_name','-b',
+    parser.add_argument('tieba_name',
                         type=str,
                         help='需要执行大吧主操作的目标贴吧吧名')
+    parser.add_argument('--BDUSS_key','-k',
+                        type=str,
+                        default='default',
+                        help='作为键值从user_control/BDUSS.json中取出BDUSS')
+
+    parser.add_argument('--block','-b',
+                        type=str,
+                        nargs='+',
+                        help='待封10天的用户名/portrait',
+                        metavar='STR')
     parser.add_argument('--unblock','-u',
                         type=str,
-                        help='待解封用户的用户名')
+                        nargs='+',
+                        help='待解封的用户名/昵称',
+                        metavar='NAME')
     parser.add_argument('--recover','-r',
                         type=int,
-                        nargs='*',
-                        help='待恢复帖子的tid(必选)与pid(可选)')
+                        nargs='+',
+                        help='待恢复帖子的tid(必选)与pid(可选)',
+                        metavar='ID')
+    parser.add_argument('--blacklist_add','-ba',
+                        type=str,
+                        nargs='+',
+                        help='待加黑名单的用户名/昵称列表',
+                        metavar='NAME')
+    parser.add_argument('--blacklist_cancel','-bc',
+                        type=str,
+                        nargs='+',
+                        help='待解黑名单的用户名/昵称列表',
+                        metavar='NAME')
+
+    parser.add_argument('--good_add','-ga',
+                        type=int,
+                        nargs='+',
+                        help='待加精帖子的tid(必选)与目标分类cid(可选)',
+                        metavar='ID')
+    parser.add_argument('--recommand','-rc',
+                        type=int,
+                        nargs='+',
+                        help='待推荐帖子的tid列表',
+                        metavar='TID')
+
+    parser.add_argument('--refuse_appeals','-ra',
+                        action='store_true',
+                        help='是否拒绝所有申诉')
+
 
     args = parser.parse_args()
+    tb_name = args.tieba_name
+    brow = browser.AdminBrowser(args.BDUSS_key)
 
-    brow = browser.AdminBrowser(args.header_filepath)
 
-
-    if args.tieba_name:
-
-        if args.unblock:
-            brow.unblock_user(args.tieba_name,args.unblock)
-        if args.recover:
-            if len(args.recover) == 1:
-                brow.recover(args.tieba_name,args.recover[0])
-            elif len(args.recover) == 2:
-                brow.recover(args.tieba_name,args.recover[0],args.recover[1])
+    if args.block:
+        for _str in args.block:
+            user = browser.UserInfo()
+            if _str.startswith('tb.'):
+                user.portrait = _str
             else:
-                browser.log.warning('Wrong format of args --recover')
-                pass
+                user.user_name = _str
+            brow.block(user,tb_name,day=10)
 
-    else:
 
-        if os.access(args.operation_ctrl_filepath,os.F_OK | os.R_OK | os.W_OK):
-            with open(args.operation_ctrl_filepath,'r',encoding='utf-8-sig') as ctrl_file:
-                json_str = ctrl_file.read()
+    if args.unblock:
+        brow.unblock_users(tb_name,args.unblock)
+
+
+    if args.recover:
+        if len(args.recover) == 1:
+            brow.recover(tb_name,args.recover[0])
+        elif len(args.recover) == 2:
+            brow.recover(tb_name,args.recover[0],args.recover[1])
         else:
-            browser.log.critical('Permission denied !')
-            brow.quit()
-            os._exit(-1)
+            browser.log.error('Wrong format of args --recover')
 
-        json_str = _run_task(json_str)
 
-        with open(args.operation_ctrl_filepath,'w',encoding='utf-8-sig') as ctrl_file:
-            ctrl_file.write()
+    if args.blacklist_add:
+        for _str in args.blacklist_add:
+            brow.blacklist_add(tb_name,_str)
+
+
+    if args.blacklist_cancel:
+        brow.blacklist_cancels(tb_name,args.blacklist_cancel)
+
+
+    if args.good_add:
+        if len(args.good_add) == 1:
+            brow.good_add(tb_name,args.good_add[0])
+        elif len(args.good_add) == 2:
+            brow.good_add(tb_name,args.good_add[0],args.good_add[1])
+        else:
+            browser.log.error('Wrong format of args --good_add')
+
+
+    if args.recommand:
+        for tid in args.recommand:
+            brow.recommend(tb_name,tid)
+
+
+    if args.refuse_appeals:
+        brow.refuse_appeals(tb_name)
+
 
     brow.quit()

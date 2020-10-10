@@ -12,7 +12,6 @@ import logging
 
 
 
-PATH = os.path.split(os.path.realpath(__file__))[0]
 SCRIPT_PATH,FILENAME = os.path.split(os.path.realpath(sys.argv[0]))
 SHOTNAME = os.path.splitext(FILENAME)[0]
 
@@ -30,11 +29,11 @@ class MyLogger(logging.Logger):
 
         super(MyLogger,self).__init__(__name__)
 
-        if not os.path.exists(PATH + '/log'):
-            os.mkdir(PATH + '/log')
+        if not os.path.exists(SCRIPT_PATH + '/log'):
+            os.mkdir(SCRIPT_PATH + '/log')
         recent_time = time.strftime('%Y-%m-%d',time.localtime(time.time()))
 
-        log_filepath = os.path.join(PATH,'log',''.join([SHOTNAME.upper(),'_',recent_time,'.log']))
+        log_filepath = os.path.join(SCRIPT_PATH,'log',''.join([SHOTNAME.upper(),'_',recent_time,'.log']))
         try:
             file_handler = logging.FileHandler(log_filepath,encoding='utf-8')
         except (PermissionError):

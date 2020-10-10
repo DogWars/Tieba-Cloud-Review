@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 import requests as req
 
-from .__define__ import log
+from ._logger import log
 from ._browser import Browser,_Basic_API
 
 
@@ -23,76 +23,48 @@ class _Admin_API(_Basic_API):
     """
 
 
-    __slots__ = ('old_del_api',
-                 'del_post_api',
-                 'del_thread_api',
-                 'del_threads_api',
-                 'block_app_api',
-                 'block_web_api',
+    old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
+    del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
+    del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
+    del_threads_api = 'https://tieba.baidu.com/f/commit/thread/batchDelete'
+    block_app_api = 'http://c.tieba.baidu.com/c/c/bawu/commitprison'
+    block_web_api = 'http://tieba.baidu.com/pmc/blockid'
 
-                 'recover_api',
-                 'unblock_api',
-                 'recommend_api',
-                 'good_add_api',
-                 'good_cancel_api',
-                 'blacklist_add_api',
-                 'blacklist_get_api',
-                 'blacklist_cancel_api',
-                 'top_add_api',
-                 'top_vipadd_api',
-                 'top_cancel_api',
-                 'top_vipcancel_api',
-                 'admin_add_api',
-                 'admin_del_api',
-                 'appeal_list_api',
-                 'appeal_handle_api')
+    recover_api = 'http://tieba.baidu.com/bawu2/platform/resPost'
+    unblock_api = 'http://tieba.baidu.com/bawu2/platform/cancelFilter'
+    recommend_api = 'http://c.tieba.baidu.com/c/c/bawu/pushRecomToPersonalized'
 
-
-    def __init__(self):
-        super(_Admin_API,self).__init__()
-
-        self.old_del_api = 'http://tieba.baidu.com/bawu2/postaudit/audit'
-        self.del_post_api = 'http://tieba.baidu.com/f/commit/post/delete'
-        self.del_thread_api = 'https://tieba.baidu.com/f/commit/thread/delete'
-        self.del_threads_api = 'https://tieba.baidu.com/f/commit/thread/batchDelete'
-        self.block_app_api = 'http://c.tieba.baidu.com/c/c/bawu/commitprison'
-        self.block_web_api = 'http://tieba.baidu.com/pmc/blockid'
-
-        self.recover_api = 'http://tieba.baidu.com/bawu2/platform/resPost'
-        self.unblock_api = 'http://tieba.baidu.com/bawu2/platform/cancelFilter'
-        self.recommend_api = 'http://c.tieba.baidu.com/c/c/bawu/pushRecomToPersonalized'
-
-        self.good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
-        self.good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
-        self.blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
-        self.blacklist_get_api = 'http://tieba.baidu.com/bawu2/platform/listBlackUser'
-        self.blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
-        self.top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
-        self.top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
-        self.top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
-        self.top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
-        self.admin_add_api = 'http://tieba.baidu.com/bawu2/platform/addBawuMember'
-        self.admin_del_api = 'http://tieba.baidu.com/bawu2/platform/delBawuMember'
-        self.appeal_list_api = 'http://tieba.baidu.com/bawu2/appeal/list'
-        self.appeal_handle_api = 'http://tieba.baidu.com/bawu2/appeal/commit'
+    good_add_api = 'https://tieba.baidu.com/f/commit/thread/good/add'
+    good_cancel_api = 'https://tieba.baidu.com/f/commit/thread/good/cancel'
+    blacklist_add_api = 'http://tieba.baidu.com/bawu2/platform/addBlack'
+    blacklist_get_api = 'http://tieba.baidu.com/bawu2/platform/listBlackUser'
+    blacklist_cancel_api = 'http://tieba.baidu.com/bawu2/platform/cancelBlack'
+    top_add_api = 'https://tieba.baidu.com/f/commit/thread/top/add'
+    top_vipadd_api = 'https://tieba.baidu.com/f/commit/thread/top/madd'
+    top_cancel_api = 'https://tieba.baidu.com/f/commit/thread/top/cancel'
+    top_vipcancel_api = 'https://tieba.baidu.com/f/commit/thread/top/mcancel'
+    admin_add_api = 'http://tieba.baidu.com/bawu2/platform/addBawuMember'
+    admin_del_api = 'http://tieba.baidu.com/bawu2/platform/delBawuMember'
+    appeal_list_api = 'http://tieba.baidu.com/bawu2/appeal/list'
+    appeal_handle_api = 'http://tieba.baidu.com/bawu2/appeal/commit'
 
 
 
 class AdminBrowser(Browser):
     """
     提供百度贴吧管理员相关功能
-    AdminBrowser(self,headers_filepath)
+    AdminBrowser(self,BDUSS_key)
 
     参数:
-        headers_filepath: str 消息头文件路径
+        BDUSS_key: str 作为键值从user_control/BDUSS.json中取出BDUSS
     """
 
 
     __slots__ = ('api',)
 
 
-    def __init__(self,headers_filepath):
-        super(AdminBrowser,self).__init__(headers_filepath)
+    def __init__(self,BDUSS_key):
+        super(AdminBrowser,self).__init__(BDUSS_key)
 
         self.api = _Admin_API()
 
@@ -130,7 +102,7 @@ class AdminBrowser(Browser):
         log_name = user.user_name if user.user_name else user.nick_name
 
         try:
-            payload = {'BDUSS':self.account.cookies['BDUSS'],
+            payload = {'BDUSS':self.account.BDUSS,
                        '_client_id':'wappc_1600500414046_633',
                        '_client_type':2,
                        '_client_version':'11.8.8.7',
@@ -147,7 +119,6 @@ class AdminBrowser(Browser):
                        'portrait':user.portrait,
                        'post_id':'null',
                        'reason':reason,
-                       'stoken':self.account.cookies['STOKEN'],
                        'tbs':self._get_tbs(),
                        'un':user.user_name,
                        'word':tb_name,
@@ -156,7 +127,7 @@ class AdminBrowser(Browser):
                        }
 
         except KeyError:
-            log.error('Failed to block in {tb_name}'.format(tb_name=tb_name))
+            log.error('Failed to initialize payload')
             return False,user
 
         retry_times = 3
@@ -168,7 +139,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"error_code":"0"',res.content.decode('unicode_escape')):
-                    log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=log_name,tb_name=tb_name,day=day))
+                    log.info('Successfully blocked {name} in {tb_name} for {day} days'.format(name=log_name,tb_name=tb_name,day=day))
                     return True,user
             retry_times-=1
             time.sleep(0.25)
@@ -246,7 +217,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"errno":0',res.content.decode('unicode_escape')):
-                    log.info('Success blocking {name} in {tb_name} for {day} days'.format(name=name,tb_name=tb_name,day=payload['day']))
+                    log.info('Successfully blocked {name} in {tb_name} for {day} days'.format(name=name,tb_name=tb_name,day=payload['day']))
                     return True,user
             retry_times-=1
             time.sleep(0.25)
@@ -287,7 +258,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Delete thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Successfully deleted thread {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
@@ -328,7 +299,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Success delete thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
+                    log.info("Successfully deleted thread {tids} in {tb_name}".format(tids=tids,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
@@ -373,7 +344,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Delete post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
+                    log.info("Successfully deleted post {pid} in {tid} in {tb_name}".format(pid=pid,tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
@@ -402,7 +373,7 @@ class AdminBrowser(Browser):
         payload = {'ie':'utf-8',
                    'word':tb_name,
                    'tbs':self._get_tbs(),
-                   'user_id':self._get_user_id(name)
+                   'user_id':self._name2userid(name)
                    }
 
         self._set_host(self.api.blacklist_add_api)
@@ -416,12 +387,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Successfully added {name} to black_list in {tb_name}".format(name=name,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to add {name} to black list in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to add {name} to black_list in {tb_name}".format(name=name,tb_name=tb_name))
         return False
 
 
@@ -492,13 +463,16 @@ class AdminBrowser(Browser):
             flag: bool 操作是否成功
         """
 
-        payload = [('ie','utf-8'),('word',tb_name),('tbs',self._get_tbs())]
+        payload = {'ie':'utf-8',
+                   'word':tb_name,
+                   'tbs':self._get_tbs(),
+                   'list[]':[]}
         count = 0
         for name in names:
             if name and type(name) == str:
                 user_id = self._name2userid(name)
                 if user_id:
-                    payload.append(('list[]',self._name2userid(name)))
+                    payload['list[]'].append(user_id)
                     count+=1
         if not count:
             return False
@@ -514,12 +488,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
+                    log.info("Successfully deleted {names} from black_list in {tb_name}".format(names=names,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to delete {names} from black list in {tb_name}".format(names=names,tb_name=tb_name))
+        log.warning("Failed to delete {names} from black_list in {tb_name}".format(names=names,tb_name=tb_name))
         return False
 
 
@@ -565,7 +539,7 @@ class AdminBrowser(Browser):
                     tid,pid = tid_pid
                     if not tid:
                         continue
-                except (ValueError):
+                except ValueError:
                     log.error("Too many values to unpack in {item}".format(item=tid_pid))
                     continue
             else:
@@ -591,12 +565,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
+                    log.info("Successfully recovered tid:{tid}/pid:{pid}".format(tid=tid,pid=pid))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to recover tid:{tid} pid:{pid}".format(tid=tid,pid=pid))
+        log.warning("Failed to recover tid:{tid}/pid:{pid}".format(tid=tid,pid=pid))
         return False
 
 
@@ -660,7 +634,7 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Unblock {names} in {tb_name}".format(names=names,tb_name=tb_name))
+                    log.info("Successfully unblocked {names} in {tb_name}".format(names=names,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
@@ -677,6 +651,9 @@ class AdminBrowser(Browser):
         参数:
             tb_name: str 所在贴吧名
             name: str 用户名或昵称
+
+        返回值:
+            flag: bool 操作是否成功
         """
 
         if tb_name and name:
@@ -698,7 +675,7 @@ class AdminBrowser(Browser):
             flag: bool 操作是否成功
         """
 
-        payload = {'BDUSS':self.account.cookies['BDUSS'],
+        payload = {'BDUSS':self.account.BDUSS,
                    '_client_id':'wappc_1600500414046_633',
                    '_client_type':'2',
                    '_client_version':'11.8.8.7',
@@ -711,12 +688,11 @@ class AdminBrowser(Browser):
                    'model':'TAS-AN00',
                    'net_type':1,
                    'oaid':'{"sc":-1,"sup":0,"tl":0}',
-                   'stoken':self.account.cookies['STOKEN'],
                    'tbs':self._get_tbs(),
                    'thread_id':tid
                    }
 
-        raw = None
+        res = None
         retry_times = 3
         while retry_times:
             try:
@@ -726,25 +702,23 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200:
-                    raw = res.text
+                    main_json = res.json()
                     break
             retry_times-=1
             time.sleep(0.25)
 
-        if not raw:
-            return False
-
         try:
-            main_json = json.loads(raw,strict=False)
+            if res.status_code != 200:
+                raise(ValueError('status code is not 200'))
             if int(main_json['error_code']):
-                raise(ValueError('error_code is not 0 ' + main_json['error_msg']))
+                raise(ValueError('error_code is not 0'))
             if int(main_json['data']['is_push_success']):
-                raise(ValueError('is_push_success is not 0 ' + main_json['data']['msg']))
-        except (json.JSONDecodeError,ValueError) as err:
+                raise(ValueError(main_json['data']['msg']))
+        except ValueError as err:
             log.error("Failed to recommend {tid} in {tb_name} Reason:{reason}".format(tid=tid,tb_name=tb_name,reason=str(err)))
             return False
 
-        log.info("Recommend {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.info("Successfully recommended {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return True
 
 
@@ -784,12 +758,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Successfully added good of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to add good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to add good of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -827,12 +801,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Successfully canceled good of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to cancel good {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to cancel good of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -877,12 +851,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Success top {tid} in {tb_name} with vip:{vip}".format(tid=tid,tb_name=tb_name,vip=use_vip))
+                    log.info("Successfully added top of {tid} in {tb_name} with vip:{vip}".format(tid=tid,tb_name=tb_name,vip=use_vip))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to add top of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -935,12 +909,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('"err_code":0',res.content.decode('unicode_escape')):
-                    log.info("Success cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+                    log.info("Successfully canceled top of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to cancel top {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
+        log.warning("Failed to cancel top of {tid} in {tb_name}".format(tid=tid,tb_name=tb_name))
         return False
 
 
@@ -963,7 +937,7 @@ class AdminBrowser(Browser):
             cid = int(cid)
             _type = types[cid]
         except (ValueError):
-            log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+            log.warning("Failed to add admin of {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
@@ -983,12 +957,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Success add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Successfully added admin of {name} in {tb_name} type:{type}".format(name=name,tb_name=tb_name,type=_type))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to add admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to add admin of {name} in {tb_name} type:{type}".format(name=name,tb_name=tb_name,type=_type))
         return False
 
 
@@ -1011,7 +985,7 @@ class AdminBrowser(Browser):
             cid = int(cid)
             _type = types[cid]
         except (ValueError):
-            log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+            log.warning("Failed to delete admin of {name} in {tb_name}".format(name=name,tb_name=tb_name))
             return False
         payload = {'ie':'utf-8',
                    'tbs':self._get_tbs(),
@@ -1031,12 +1005,12 @@ class AdminBrowser(Browser):
                 pass
             else:
                 if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                    log.info("Success delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+                    log.info("Successfully canceled admin of {name} in {tb_name}".format(name=name,tb_name=tb_name))
                     return True
             retry_times-=1
             time.sleep(0.25)
 
-        log.warning("Failed to delete admin {name} in {tb_name}".format(name=name,tb_name=tb_name))
+        log.warning("Failed to cancel admin of {name} in {tb_name}".format(name=name,tb_name=tb_name))
         return False
 
 
@@ -1079,12 +1053,12 @@ class AdminBrowser(Browser):
                     pass
                 else:
                     if res.status_code == 200 and re.search('success',res.content.decode('unicode_escape')):
-                        log.info("Success handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+                        log.info("Successfully handled {appeal_id} in {tb_name} refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
                         return True
                 retry_times-=1
                 time.sleep(0.25)
 
-            log.warning("Failed to handle {appeal_id} in {tb_name}, refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
+            log.warning("Failed to handle {appeal_id} in {tb_name} refuse:{refuse}".format(appeal_id=appeal_id,tb_name=tb_name,refuse=refuse))
             return False
 
 

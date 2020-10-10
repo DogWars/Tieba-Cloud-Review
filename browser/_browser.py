@@ -1,5 +1,5 @@
 ﻿# -*- coding:utf-8 -*-
-__all__ = ('SHOTNAME',)
+__all__ = ('Browser',)
 
 
 
@@ -20,81 +20,67 @@ import pickle
 from bs4 import BeautifulSoup
 
 from .__define__ import *
-
-
-
-PATH = os.path.split(os.path.realpath(__file__))[0]
+from ._logger import log
 
 
 
 class _Headers(object):
     """
     消息头
+
+    参数:
+        BDUSS_key: str 作为键值从user_control/BDUSS.json中取出BDUSS
     """
 
 
-    __slots__ = ('headers','cookies','app_headers','app_cookies')
+    __slots__ = ('headers','BDUSS')
 
 
-    def __init__(self,filepath):
-        self.update(filepath)
+    app_headers = {'Content-Type':'application/x-www-form-urlencoded',
+                    'Charset':'UTF-8',
+                    'User-Agent':'bdtb for Android 11.8.8.7',
+                    'Connection':'Keep-Alive',
+                    'client_logid':'1600505010776',
+                    'client_user_token':'957339815',
+                    'cuid':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
+                    'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
+                    'cuid_gid':'',
+                    'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
+                    'client_type':'2',
+                    'Accept-Encoding':'gzip',
+                    'Host':'c.tieba.baidu.com',
+                    }
 
-        self.app_headers = {'Content-Type':'application/x-www-form-urlencoded',
-                           'Charset':'UTF-8',
-                           'User-Agent':'bdtb for Android 11.8.8.7',
-                           'Connection':'Keep-Alive',
-                           'client_logid':'1600505010776',
-                           'client_user_token':'957339815',
-                           'cuid':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
-                           'cuid_galaxy2':'573B24810C196E865FCB86C51EF8AC09|VDVSTWVBW',
-                           'cuid_gid':'',
-                           'c3_aid':'A00-J63VLDXPDOTDMRZVGYYOLCWFVKGRXMQO-UVT3YYGX',
-                           'client_type':'2',
-                           'Accept-Encoding':'gzip',
-                           'Host':'c.tieba.baidu.com',
-                           }
-
-        self.app_cookies = {'TBBRAND':'TAS-AN00',
-                            'BAIDUCUID':'gu2wu_aIB8guivtqg8-Y8_iXHuYduS8Kg8H0fl8Ovf8j9HMJJk1yRhEmA',
-                            'CUID':self.app_headers['cuid'],
-                            'ka':'open',
-                            'BAIDUZID':'000'
-                            }
+    BDUSS_json = None
 
 
-    def update(self,filepath:str):
+    def __init__(self,BDUSS_key):
+
+        self.headers = {'Host':'tieba.baidu.com',
+                        'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:81.0) Gecko/20100101 Firefox/81.0',
+                        'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language':'zh-CN,zh;q=0.8,en-US;q=0.7,en;q=0.5,zh-TW;q=0.3,zh-HK;q=0.2',
+                        'Accept-Encoding':'gzip, deflate, br',
+                        'DNT':'1',
+                        'Cache-Control':'no-cache',
+                        'Connection':'keep-alive',
+                        'Cookie':None,
+                        'Upgrade-Insecure-Requests':'1'
+                        }
+
+        self.renew_BDUSS(self.BDUSS_json[BDUSS_key])
+
+
+    def renew_BDUSS(self,BDUSS):
         """
-        Read headers.txt and return the dict of headers.
-        read_headers_file(filepath)
+        更新BDUSS
 
-        Parameters:
-            filepath:str Path of the headers.txt
+        参数:
+            BDUSS:str
         """
 
-        self.headers = {}
-        self.cookies = {}
-        try:
-            with open(filepath,'r',encoding='utf-8') as header_file:
-                rd_lines = header_file.readlines()
-                for text in rd_lines:
-                    if re.match('GET|POST',text):
-                        continue
-                    else:
-                        text = text.replace('\n','').split(':',1)
-                        self.headers[text[0].strip().capitalize()] = text[1].strip()
-        except (FileExistsError):
-            log.critical("headers.txt not exist! Please create it from browser!")
-            raise(FileExistsError("headers.txt not exist! Please create it from browser!"))
-
-        if self.headers.__contains__('Referer'):
-            del self.headers['Referer']
-        if self.headers.__contains__('Cookie'):
-            for text in self.headers['Cookie'].split(';'):
-                text = text.strip().split('=')
-                self.cookies[text[0]] = text[1]
-        else:
-            log.critical("raw_headers[\"cookies\"] not found!")
-            raise(AttributeError("raw_headers[\"cookies\"] not found!"))
+        self.BDUSS = BDUSS
+        self.headers['Cookie'] = 'BDUSS={};'.format(BDUSS)
 
 
     def _set_host(self,url):
@@ -105,6 +91,14 @@ class _Headers(object):
         else:
             return True
 
+try:
+    file = open(os.path.join(SCRIPT_PATH,'user_control/BDUSS.json'),'r',encoding='utf-8')
+    _Headers.BDUSS_json = json.load(file)
+    file.close()
+except IOError:
+    log.critical("Unable to read mysql.json!")
+    raise
+
 
 
 class _Basic_API(object):
@@ -113,44 +107,31 @@ class _Basic_API(object):
     """
 
 
-    __slots__ = ('tieba_url',
-                 'tieba_post_url',
-                 'comment_url',
-                 'user_homepage_url',
+    tieba_url = 'http://tieba.baidu.com/f'
+    tieba_post_url = 'http://tieba.baidu.com/p/'
+    comment_url = 'http://tieba.baidu.com/p/comment'
+    user_homepage_url = 'https://tieba.baidu.com/home/main/'
 
-                 'tbs_api',
-                 'fid_api',
-                 'user_json_api',
-                 'panel_api',
-                 'self_info_api',
+    tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
+    fid_api = 'http://tieba.baidu.com/sign/info'
+    user_json_api = 'http://tieba.baidu.com/i/sys/user_json'
+    panel_api = 'https://tieba.baidu.com/home/get/panel'
+    self_info_api = 'http://tieba.baidu.com/f/user/json_userinfo'
+    self_at_api = 'http://c.tieba.baidu.com/c/u/feed/atme'
 
-                 'app_thread_api',
-                 'app_post_api',
-                 'app_comment_api')
-
-
-    def __init__(self):
-        self.tieba_url = 'http://tieba.baidu.com/f'
-        self.tieba_post_url = 'http://tieba.baidu.com/p/'
-        self.comment_url = 'http://tieba.baidu.com/p/comment'
-        self.user_homepage_url = 'https://tieba.baidu.com/home/main/'
-
-        self.tbs_api = 'http://tieba.baidu.com/dc/common/tbs'
-        self.fid_api = 'http://tieba.baidu.com/sign/info'
-        self.user_json_api = 'http://tieba.baidu.com/i/sys/user_json'
-        self.panel_api = 'https://tieba.baidu.com/home/get/panel'
-        self.self_info_api = 'http://tieba.baidu.com/f/user/json_userinfo'
-
-        self.app_thread_api = 'http://c.tieba.baidu.com/c/f/frs/page'
-        self.app_post_api = 'http://c.tieba.baidu.com/c/f/pb/page'
-        self.app_comment_api = 'http://c.tieba.baidu.com/c/f/pb/floor'
+    app_thread_api = 'http://c.tieba.baidu.com/c/f/frs/page'
+    app_post_api = 'http://c.tieba.baidu.com/c/f/pb/page'
+    app_comment_api = 'http://c.tieba.baidu.com/c/f/pb/floor'
 
 
 
 class Browser(object):
     """
     贴吧浏览、参数获取等API的封装
-    Browser(headers_filepath:str)
+    Browser(BDUSS_key)
+
+    参数:
+        BDUSS_key: str 作为键值从user_control/BDUSS.json中取出BDUSS
     """
 
 
@@ -161,27 +142,24 @@ class Browser(object):
                  'api')
 
 
-    def __init__(self,headers_filepath:str):
-        """
-        Browser(headers_filepath:str)
-        """
+    def __init__(self,BDUSS_key):
 
         self.start_time = time.time()
 
-        log_dir = os.path.join(PATH,'log')
+        log_dir = os.path.join(SCRIPT_PATH,'log')
         if not os.path.exists(log_dir):
             os.mkdir(log_dir)
         recent_time = time.strftime('%Y-%m-%d',time.localtime(time.time()))
 
-        self.fid_cache_filepath = os.path.join(PATH,'cache/fid_cache.pk')
+        self.fid_cache_filepath = os.path.join(MODULE_PATH,'cache/fid_cache.pk')
         try:
             with open(self.fid_cache_filepath,'rb') as pickle_file:
                 self.fid_dict = pickle.load(pickle_file)
         except IOError:
-            log.warning('"{filepath}" not found. Create new fid_dict'.format(filepath=self.fid_cache_filepath))
+            log.warning('Failed to read fid_cache in "{filepath}". Create a new one.'.format(filepath=self.fid_cache_filepath))
             self.fid_dict = {}
 
-        self.account = _Headers(headers_filepath)
+        self.account = _Headers(BDUSS_key)
 
         self.api = _Basic_API()
 
@@ -195,7 +173,7 @@ class Browser(object):
             with open(self.fid_cache_filepath,'wb') as pickle_file:
                 pickle.dump(self.fid_dict,pickle_file)
         except AttributeError:
-            log.warning("Failed to save fid cache!")
+            log.error("Failed to save fid cache!")
 
         log.debug('Time cost:{t:.3f}'.format(t=time.time() - self.start_time))
 
@@ -271,14 +249,14 @@ class Browser(object):
             retry_times-=1
             time.sleep(0.25)
 
-        if res.status_code == 200:
-            if re.search('"vipInfo":\[\]',res.text):
-                return False
-            else:
-                return True
-        else:
-            log.warning('Failed to get vip status of {keyword}!'.format(keyword=keyword))
+        if res.status_code != 200:
+            log.error("Failed to get vip status of {keyword}!".format(keyword=keyword))
             return None
+
+        if re.search('"vipInfo":\[\]',res.text):
+            return False
+        else:
+            return True
 
 
     def _is_self_vip(self):
@@ -341,6 +319,7 @@ class Browser(object):
         """
 
         self._set_host(self.api.tbs_api)
+        tbs = ''
         retry_times = 5
         while retry_times:
             try:
@@ -353,12 +332,14 @@ class Browser(object):
                     raw = re.search('"tbs":"([a-z\d]+)',res.text)
                     if raw:
                         tbs = raw.group(1)
-                        return tbs
+                        break
             retry_times-=1
             time.sleep(0.25)
 
-        log.error("Failed to get tbs")
-        return ''
+        if not tbs:
+            log.warning("Failed to get tbs")
+
+        return tbs
 
 
     def _tbname2fid(self,tb_name):
@@ -390,13 +371,17 @@ class Browser(object):
                         raw = re.search('"forum_id":(\d+)', res.text)
                         if raw:
                             fid = int(raw.group(1))
-                            self.fid_dict[tb_name] = fid
-                            return fid
+                            break
                 retry_times-=1
                 time.sleep(0.25)
 
-        log.critical("Failed to get fid of {name}".format(name=tb_name))
-        raise(ValueError("Failed to get fid of {name}".format(name=tb_name)))
+        if not fid:
+            error_msg = "Failed to get fid of {name}".format(name=tb_name)
+            log.critical(error_msg)
+            raise(ValueError(error_msg))
+
+        self.fid_dict[tb_name] = fid
+        return fid
 
 
     def _name2portrait(self,name):
@@ -413,6 +398,7 @@ class Browser(object):
 
         name = str(name)
         self._set_host(self.api.panel_api)
+        portrait = ''
         retry_times = 3
         while retry_times:
             try:
@@ -426,12 +412,14 @@ class Browser(object):
                     raw = re.search('"portrait":"([\w.-]+)', res.text)
                     if raw:
                         portrait = raw.group(1)
-                        return portrait
+                        break
             retry_times-=1
             time.sleep(0)
 
-        log.error("Failed to get portrait of {name}".format(name=name))
-        return ''
+        if not portrait:
+            log.warning("Failed to get portrait of {name}".format(name=name))
+
+        return portrait
 
 
     def _name2userid(self,name):
@@ -447,6 +435,7 @@ class Browser(object):
         """
 
         self._set_host(self.api.panel_api)
+        user_id = 0
         retry_times = 3
         while retry_times:
             try:
@@ -460,12 +449,14 @@ class Browser(object):
                     raw = re.search('"id":(\d+)', res.text)
                     if raw:
                         user_id = int(raw.group(1))
-                        return user_id
+                        break
             retry_times-=1
             time.sleep(0)
 
-        log.error("Failed to get user_id of {name}".format(name=name))
-        return 0
+        if not user_id:
+            log.warning("Failed to get user_id of {name}".format(name=name))
+
+        return user_id
 
 
     def _portrait2names(self,portrait):
@@ -481,11 +472,11 @@ class Browser(object):
         """
 
         if not portrait.startswith('tb.'):
-            log.error("Wrong portrait format {portrait}".format(portrait=portrait))
-            return ('','')
+            log.warning("Wrong portrait format {portrait}".format(portrait=portrait))
+            return '',''
 
         self._set_host(self.api.panel_api)
-        raw = None
+        error_no = 1
         retry_times = 3
         while retry_times:
             try:
@@ -496,18 +487,21 @@ class Browser(object):
                 pass
             else:
                 if res.status_code == 200:
-                    raw = json.loads(res.text)
-                    if raw['error'] == '成功':
-                        break
+                    raw_json = res.json()
+                    error_no = raw_json['no']
+                    break
             retry_times-=1
-            time.sleep(0)
+            time.sleep(0.25)
 
-        if not raw or not raw['error'] == '成功':
-            log.error("Failed to get user_id of {name}".format(name=name))
-            return ('','')
+        if error_no:
+            log.warning("Failed to get names of {portrait}".format(portrait=portrait))
+            return '',''
 
-        user_name = raw['data']['name']
-        nick_name = raw['data']['name_show']
+        user_name = raw_json['data']['name']
+        nick_name = raw_json['data']['name_show']
+        if nick_name==user_name:
+            nick_name=''
+
         return (user_name,nick_name)
 
 
@@ -662,7 +656,7 @@ class Browser(object):
                 posts.append(post)
 
         except KeyError:
-            log.error("KeyError: Failed to get posts of {tid}".format(tid=tid))
+            log.error("KeyError - Failed to get posts of {tid}".format(tid=tid))
 
         return posts
 
@@ -702,7 +696,7 @@ class Browser(object):
             time.sleep(0)
 
         if not raw:
-            log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
+            log.error("Failed to get comments of {pid} in {tid}".format(tid=tid,pid=pid))
             return comments
 
         content = BeautifulSoup(raw,'lxml')
@@ -742,7 +736,7 @@ class Browser(object):
                 comments.append(comment)
 
         except KeyError:
-            log.error("KeyError: Failed to get posts of {pid} in thread {tid}".format(tid=tid,pid=pid))
+            log.error("KeyError - Failed to get posts of {pid} in {tid}".format(tid=tid,pid=pid))
 
         return comments
 
@@ -966,7 +960,7 @@ class Browser(object):
             if int(main_json['error_code']):
                 raise(ValueError('error_code is not 0'))
         except ValueError:
-            log.error("Failed to get comments of {pid} in thread {tid}".format(tid=tid,pid=pid))
+            log.error("Failed to get comments of {pid} in {tid}".format(tid=tid,pid=pid))
             return comments
 
         comments._init_pageinfo(main_json['page'])
@@ -986,10 +980,66 @@ class Browser(object):
             comment.user.portrait = re.match('[\w.-]+',author_info['portrait']).group()
             if author_info['gender']:
                 comment.user.gender = author_info['gender']
-            comment.level = int(author_info['level_id'])
+            comment.level = author_info['level_id']
 
-            comment.create_time = int(comment_raw['time'])
+            comment.create_time = comment_raw['time']
 
             comments.append(comment)
 
         return comments
+
+
+    def get_self_ats(self):
+        """
+        获取@信息
+
+        get_self_at()
+        """
+
+        payload = {'BDUSS':self.account.BDUSS,
+                   '_client_id':'wappc_1600500414046_633',
+                   '_client_type':'2',
+                   '_client_version':'11.8.8.7',
+                   '_phone_imei':'000000000000000'
+                   }
+
+        ats = []
+        res = None
+        retry_times = 3
+        while retry_times:
+            try:
+                res = req.post(self.api.self_at_api,
+                               data=self._app_sign(payload),
+                               headers=self.account.app_headers)
+            except req.exceptions.RequestException:
+                pass
+            else:
+                if res.status_code == 200:
+                    main_json = res.json()
+                    break
+            retry_times-=1
+            time.sleep(0.25)
+
+        try:
+            if res.status_code != 200:
+                raise(ValueError('status code is not 200'))
+            if int(main_json['error_code']):
+                raise(ValueError('error_code is not 0'))
+        except ValueError:
+            log.error("Failed to get ats")
+            return ats
+
+        for at_raw in main_json['at_list']:
+            at = At()
+            at.tb_name = at_raw['fname']
+            at.tid = at_raw['thread_id']
+            at.pid = at_raw['post_id']
+            at.text = at_raw['content'].lstrip()
+
+            at.user = UserInfo(at_raw['quote_user'])
+
+            at.create_time = at_raw['time']
+
+            ats.append(at)
+
+        return ats

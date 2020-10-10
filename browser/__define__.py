@@ -1,17 +1,25 @@
 # -*- coding:utf-8 -*-
-__all__ = ('log','SHOTNAME',
+__all__ = ('MODULE_PATH','SCRIPT_PATH','FILENAME','SHOTNAME',
            'UserInfo','UserInfo_Dict',
            'Web_Thread','Web_Post','Web_Comment',
            'Thread','Post','Comment',
-           'Posts','Comments')
+           'Posts','Comments',
+           'At')
 
 
-
+import os
+import sys
 import traceback
 
 import re
 
-from ._logger import log,SHOTNAME
+from ._logger import log
+
+
+
+MODULE_PATH = os.path.split(os.path.realpath(__file__))[0]
+SCRIPT_PATH,FILENAME = os.path.split(os.path.realpath(sys.argv[0]))
+SHOTNAME = os.path.splitext(FILENAME)[0]
 
 
 
@@ -32,12 +40,26 @@ class UserInfo(object):
                  'gender')
 
 
-    def __init__(self):
-        self.user_name = ""
-        self.nick_name = ""
-        self.portrait = ""
-        self.gender = 0
+    def __init__(self,_dict=None):
+        self.set_null()
+        if _dict:
+            try:
+                self.user_name = _dict.get('name','')
+                if _dict['name_show'] != _dict['name']:
+                    self.nick_name = _dict['name_show']
+                self.portrait = re.match('[\w.-]+',_dict['portrait']).group()
+                if _dict.get('gender',0):
+                    self.gender = int(_dict['gender'])
+            except KeyError:
+                log.warning(traceback.format_exc())
+                self.set_null()
 
+
+    def set_null(self):
+        self.user_name = ''
+        self.nick_name = ''
+        self.portrait = ''
+        self.gender = 0
 
 
 class UserInfo_Dict(dict):
@@ -51,27 +73,18 @@ class UserInfo_Dict(dict):
 
 
     def __init__(self,user_list:list):
-        for user in user_list:
-            if not user.__contains__('name_show'):
+        for user_dict in user_list:
+            if not user_dict.__contains__('name_show'):
                 continue
 
-            _user = UserInfo()
+            user = UserInfo(user_dict)
 
             try:
-                if user.get('level_id',0):
-                    level = int(user['level_id'])
-                else:
-                    level = 0
-                _user.user_name = user.get('name','')
-                if user['name_show'] != user['name']:
-                    _user.nick_name = user['name_show']
-                _user.portrait = re.match('[\w.-]+',user['portrait']).group()
-                if user.get('gender',0):
-                    _user.gender = int(user['gender'])
-            except KeyError:
-                log.error(traceback.format_exc())
+                level = int(user_dict.get('level_id',0))
+            except ValueError:
+                level = 0
 
-            self[user['id']] = (_user,level)
+            self[user_dict['id']] = (user,level)
 
 
 
@@ -229,8 +242,11 @@ class Thread(Web_Thread):
 
         texts = []
         for fragment in content_fragments:
-            if fragment['type'] in ['0','1','4','18']:
+            if fragment['type'] in ['0','4','9','18']:
                 texts.append(fragment['text'])
+            elif fragment['type'] == '1':
+                texts.append(fragment['link'])
+                texts.append(' ' + fragment['text'])
         self.first_floor = ''.join(texts)
 
 
@@ -373,8 +389,11 @@ class Post(Web_Post):
         self.smileys = []
         self.has_audio = False
         for fragment in content_fragments:
-            if fragment['type'] in ['0','1','4','18']:
+            if fragment['type'] in ['0','4','9','18']:
                 texts.append(fragment['text'])
+            elif fragment['type'] == '1':
+                texts.append(fragment['link'])
+                texts.append(' ' + fragment['text'])
             elif fragment['type'] == '2':
                 self.smileys.append(fragment['text'])
             elif fragment['type'] == '3':
@@ -531,8 +550,11 @@ class Comment(Web_Comment):
         self.smileys = []
         self.has_audio = False
         for fragment in content_fragments:
-            if fragment['type'] in ['0','1','4']:
+            if fragment['type'] in ['0','4','9']:
                 texts.append(fragment['text'])
+            elif fragment['type'] == '1':
+                texts.append(fragment['link'])
+                texts.append(' ' + fragment['text'])
             elif fragment['type'] == '2':
                 self.smileys.append(fragment['text'])
             elif fragment['type'] == '10':
@@ -587,3 +609,35 @@ class Comments(list):
     @property
     def has_next(self):
         return False if self._current_pn == self._total_pn else True
+
+
+
+class At(_BaseContent):
+    """
+    @信息
+
+    text: 标题文本
+    tb_name: 帖子所在吧
+    tid: 帖子编号
+    pid: 回复编号
+    create_time: 10位时间戳，创建时间
+    user: UserInfo类 发布者信息
+    """
+
+
+    __slots__ = ('tb_name','_create_time',)
+
+
+    def __init__(self):
+        super(At,self).__init__()
+        self.tb_name = ''
+        self._create_time = 0
+
+
+    @property
+    def create_time(self):
+        return self._create_time
+
+    @create_time.setter
+    def create_time(self,new_create_time):
+        self._create_time = int(new_create_time)

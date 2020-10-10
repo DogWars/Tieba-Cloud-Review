@@ -18,6 +18,7 @@
 """
 
 from .__define__ import *
+from ._logger import log
 from ._browser import *
 from .admin_browser import *
 from .cloud_review import *
